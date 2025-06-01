@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Add Movie{% endblock %}
+{% block content %}
+    <h1>Add new Movie</h1>
+    {% if success == True %}
+        <p>Movie: {{ movie_name }} added successfully!</p>
+    {% elif success == False %}
+        <p>Failed to add movie. {{ error }}. <br>
+            Please try again.</p>
+    {% elif success == None %}
+    {% endif %}
+    <form action="/movies/new" method="POST">
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name" required>
+        <button type="submit">Add Movie</button>
+    </form>
+   {% endblock %}

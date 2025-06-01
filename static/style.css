@@ -1,0 +1,259 @@
+body {
+    font-family: "Inter", Arial, sans-serif;
+    margin: 0;
+    background: linear-gradient(120deg, #f0f4fa 0%, #cfd9e6 100%);
+    min-height: 100vh;
+    color: #232a45;
+}
+
+.topnav {
+    background: rgba(35,42,69,0.97);
+    display: flex;
+    gap: 12px;
+    padding: 9px 0 9px 0;
+    border-bottom: 1.5px solid #225ac4;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 1px 8px rgba(34, 44, 90, 0.07);
+}
+.topnav a {
+    color: #2069e0;
+    text-decoration: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-weight: 500;
+    font-size: 1rem;
+    transition: background 0.15s, color 0.15s;
+}
+.topnav a.active, .topnav a:hover {
+    background: #2069e0;
+    color: #fff;
+}
+
+h1.title {
+    text-align: center;
+    color: #225ac4;
+    margin: 22px 0 14px 0;
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+.status-message p {
+    text-align: center;
+    font-weight: 500;
+    color: #168b6f;
+    margin-bottom: 18px;
+    font-size: 1.01rem;
+}
+
+.css-carousel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    justify-content: center;
+    padding: 24px 0 18px 0;
+    background: transparent;
+}
+
+.carousel-item {
+    flex: 0 0 160px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 3px 14px rgba(32,90,224,0.09), 0 1.5px 4px rgba(32,90,224,0.06);
+    padding: 13px 7px 13px 7px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: box-shadow 0.2s, transform 0.18s;
+    border: 1px solid #e2e6ef;
+    min-height: 250px;
+    min-width: 160px;
+    max-width: 180px;
+    position: relative;
+}
+
+.carousel-item:hover {
+    box-shadow: 0 7px 24px rgba(32,105,224,0.14), 0 3px 9px rgba(32,90,224,0.09);
+    transform: translateY(-3px) scale(1.045);
+    border-color: #b6cdf5;
+    z-index: 2;
+}
+
+.carousel-item img {
+    width: 105px;
+    height: 145px;
+    object-fit: cover;
+    border-radius: 7px;
+    margin-bottom: 9px;
+    box-shadow: 0 2px 6px rgba(32,105,224,0.04);
+    transition: transform 0.17s, box-shadow 0.15s;
+}
+.carousel-item:hover img {
+    transform: scale(1.09);
+    box-shadow: 0 6px 18px rgba(32,90,224,0.15);
+}
+
+.carousel-item ul {
+    list-style: none;
+    padding: 0;
+    width: 100%;
+    margin: 0 0 7px 0;
+    font-size: 0.99rem;
+    text-align: left;
+}
+.carousel-item ul li {
+    color: #29437c;
+    margin: 2px 0;
+    font-size: 0.98rem;
+    word-break: break-word;
+    line-height: 1.35;
+}
+.carousel-item ul li a {
+    color: #168b6f;
+    text-decoration: underline;
+    transition: color 0.14s;
+}
+.carousel-item ul li a:hover {
+    color: #2069e0;
+}
+
+/* Delete Button (rot) */
+button,
+.back_button a {
+    background: #2069e0;
+    color: #fff;
+    border: none;
+    border-radius: 7px;
+    padding: 6px 13px;
+    cursor: pointer;
+    font-size: 0.98rem;
+    font-weight: 500;
+    margin: 2px 0 0 0;
+    transition: background 0.15s, color 0.12s;
+}
+button.delete-btn {
+    background: #e02d34;
+    color: #fff;
+    border-radius: 7px;
+}
+button.delete-btn:hover {
+    background: #a41d21;
+}
+button:hover,
+.back_button a:hover {
+    background: #225ac4;
+    color: #e2f1ff;
+}
+
+/* Forms */
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    justify-content: center;
+    margin-bottom: 24px;
+    margin-top: 5px;
+}
+
+.action-form {
+    background: #fff;
+    padding: 16px 10px;
+    border-radius: 9px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 145px;
+    max-width: 260px;
+    box-sizing: border-box;
+    border: 1px solid #b6cdf5;
+    box-shadow: 0 1.5px 9px rgba(32, 90, 224, 0.04);
+}
+
+.action-form label {
+    margin-bottom: 7px;
+    color: #225ac4;
+    font-weight: 500;
+    font-size: 0.99rem;
+}
+.action-form input[type="text"] {
+    padding: 7px;
+    border-radius: 7px;
+    border: 1px solid #e2e6ef;
+    margin-bottom: 10px;
+    width: 100%;
+    background: #f4f8fb;
+    color: #25315b;
+    font-size: 0.98rem;
+}
+
+.action-form button {
+    background: #168b6f;
+    color: #fff;
+    font-weight: 600;
+    border: none;
+    padding: 7px 0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.16s, color 0.14s;
+    width: 100%;
+    max-width: 150px;
+    font-size: 0.99rem;
+}
+.action-form button:hover {
+    background: #2069e0;
+    color: #fff;
+}
+
+/* Optional: Subtile Textur oder Pattern als Overlay */
+body::after {
+    content: "";
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    opacity: 0.15;
+    background: url("https://www.transparenttextures.com/patterns/diamond-upholstery.png") repeat;
+    z-index: 0;
+}
+
+.scroll-instruction {
+    color: #728fbd;
+    font-size: 0.95rem;
+    text-align: center;
+    margin-top: 6px;
+    font-style: italic;
+    user-select: none;
+}
+
+@media (max-width: 900px) {
+    .css-carousel {
+        gap: 10px;
+        padding: 14px 0;
+    }
+    .carousel-item {
+        flex: 0 0 115px;
+        padding: 9px 4px 9px 4px;
+    }
+    .carousel-item img {
+        width: 70px;
+        height: 100px;
+    }
+}
+
+@media (max-width: 600px) {
+    .carousel-item {
+        flex: 0 0 70px;
+    }
+    .carousel-item img {
+        width: 43px;
+        height: 60px;
+    }
+    h1.title {
+        font-size: 1.28rem;
+    }
+    .action-form {
+        min-width: 80px;
+        padding: 8px 4px;
+    }
+}
+
