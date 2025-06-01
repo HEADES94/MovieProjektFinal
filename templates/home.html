@@ -1,23 +1,27 @@
-{% extends "base.html" %}
-    {% block title %}Movie - WebApp{% endblock %}
-    {% block content %}
-    <h1 class="home_title">Welcome to the Movie Web App</h1>
-    <section class="content-container">
-        <h2 class="content-title">Features</h2>
-        <img src="/static/homepic.jpg" alt="Movie Image" class="content-image">
-
-        <p class="content-paragraph">
-            This Movie Web App has the following features:
-        </p>
-        <ul class="content-paragraph">
-            <li>View all <a href="/movies">movies</a></li>
-            <li>View a single movie</li>
-            <li>View all <a href="/users">users</a></li>
-            <li>View a single user</li>
-            <li>View all user's movies list</li>
-            <li>View a single user's movie</li>
-        </ul>
-    </section>
-
-
-    {% endblock %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MovieWeb Home</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <h1>MovieWeb</h1>
+        <nav class="nav-bar">
+            <a href="/" class="nav-btn">Home</a>
+            <a href="/movies" class="nav-btn">Movies</a>
+            <a href="/users" class="nav-btn">Users</a>
+            <a href="/movies/new" class="nav-btn">Add Movie</a>
+            <a href="/users/new" class="nav-btn">Add User</a>
+        </nav>
+    </header>
+    <main>
+        <img src="/static/homepic.jpg" alt="MovieWeb" class="home-pic">
+        <section class="welcome-section">
+            <h2>Welcome to MovieWeb!</h2>
+            <p>Your platform for exploring movies and managing your collection.</p>
+        </section>
+    </main>
+</body>
+</html>

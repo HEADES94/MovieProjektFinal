@@ -1,17 +1,48 @@
-{% extends "base.html" %}
-{% block title %}Add Movie{% endblock %}
-{% block content %}
-    <h1>Add new Movie</h1>
-    {% if success == True %}
-        <p>Movie: {{ movie_name }} added successfully!</p>
-    {% elif success == False %}
-        <p>Failed to add movie. {{ error }}. <br>
-            Please try again.</p>
-    {% elif success == None %}
-    {% endif %}
-    <form action="/movies/new" method="POST">
-        <label for="name">Name:</label>
-        <input type="text" id="name" name="name" required>
-        <button type="submit">Add Movie</button>
-    </form>
-   {% endblock %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Add New Movie</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <h1 class="main-title">Add New Movie</h1>
+        <nav class="nav-bar">
+            <a class="nav-btn" href="/">Home</a>
+            <a class="nav-btn" href="/movies">Movies</a>
+            <a class="nav-btn" href="/new_movie">Add Movie</a>
+            <a class="nav-btn" href="/new_user">New User</a>
+        </nav>
+    </header>
+    <main class="main-content">
+        <form class="movie-form" action="/new_movie" method="post">
+            <label for="name">Title:</label>
+            <input type="text" name="name" id="name" required>
+
+            <label for="year">Year:</label>
+            <input type="number" name="year" id="year" required>
+
+            <label for="director">Director:</label>
+            <input type="text" name="director" id="director">
+
+            <label for="rating">Rating:</label>
+            <input type="text" name="rating" id="rating">
+
+            <label for="plot">Plot:</label>
+            <textarea name="plot" id="plot" rows="3"></textarea>
+
+            <label for="country">Country:</label>
+            <input type="text" name="country" id="country">
+
+            <label for="genre">Genre:</label>
+            <input type="text" name="genre" id="genre">
+
+            <label for="poster">Poster URL:</label>
+            <input type="text" name="poster" id="poster">
+
+            <button type="submit" class="save-btn">Save Movie</button>
+        </form>
+    </main>
+</body>
+</html>

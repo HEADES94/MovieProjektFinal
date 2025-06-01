@@ -1,34 +1,31 @@
-{% extends 'base.html' %}
-{% block title %}Movies List{% endblock %}
-
-{% block content %}
-<h1 class="title">Movies List</h1>
-
-<div class="status-message">
-    {% if success%}
-        <p>Movie deleted successfully!</p>
-    {% elif success == False %}
-        <p>Failed to delete movie. Please try again.</p>
-    {% endif %}
-</div>
-
-<div class="movie-list">
-  <div class="css-carousel" tabindex="0" aria-label="Movies carousel">
-    {% for movie in movies %}
-      <div class="carousel-item" role="group" aria-roledescription="slide" aria-label="{{ loop.index }} of {{ movies|length }}">
-          <a href="/movies/{{ movie.id }}">
-        <img src="{{ movie.poster }}" alt="{{ movie.name }}" height="200"></a>
-        <ul>
-          <li>{{ movie.name }} ({{ movie.year }})</a></li>
-          <li>
-            <form action="/movies" method="post">
-              <button type="submit" id="movie_id" name="movie_id" value="{{ movie.id }}">Delete</button>
-            </form>
-          </li>
-        </ul>
-      </div>
-    {% endfor %}
-  </div>
-  <p class="scroll-instruction">Drag or scroll horizontally with your mouse or trackpad to browse movies.</p>
-</div>
-{% endblock %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Movie List</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+    <header>
+        <h1 class="main-title">Movie Library</h1>
+        <nav class="nav-bar">
+            <a class="nav-btn" href="/">Home</a>
+            <a class="nav-btn" href="/movies">Movies</a>
+            <a class="nav-btn" href="/new_movie">Add Movie</a>
+            <a class="nav-btn" href="/new_user">New User</a>
+        </nav>
+    </header>
+    <main class="main-content">
+        <div class="movie-list">
+            {% for movie in movies %}
+            <div class="movie-card">
+                <img src="{{ movie.poster }}" alt="{{ movie.name }}" class="movie-poster-small">
+                <h3>{{ movie.name }}</h3>
+                <p>{{ movie.year }}</p>
+                <a class="details-btn" href="/movies/{{ movie.id }}">Details</a>
+            </div>
+            {% endfor %}
+        </div>
+    </main>
+</body>
+</html>
