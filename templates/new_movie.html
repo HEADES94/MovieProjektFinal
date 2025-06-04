@@ -1,48 +1,50 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Add New Movie</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <header>
-        <h1 class="main-title">Add New Movie</h1>
-        <nav class="nav-bar">
-            <a class="nav-btn" href="/">Home</a>
-            <a class="nav-btn" href="/movies">Movies</a>
-            <a class="nav-btn" href="/new_movie">Add Movie</a>
-            <a class="nav-btn" href="/new_user">New User</a>
-        </nav>
-    </header>
-    <main class="main-content">
-        <form class="movie-form" action="/new_movie" method="post">
-            <label for="name">Title:</label>
-            <input type="text" name="name" id="name" required>
+{% extends "base.html" %}
 
-            <label for="year">Year:</label>
-            <input type="number" name="year" id="year" required>
+{% block title %}Neuer Film - MovieProjekt{% endblock %}
 
-            <label for="director">Director:</label>
-            <input type="text" name="director" id="director">
+{% block content %}
+<div class="form-container glass-card fade-in">
+    <div class="form-header">
+        <h1>Neuen Film hinzufügen</h1>
+        <p class="form-subtitle">Erweitern Sie unsere Film-Datenbank</p>
+    </div>
 
-            <label for="rating">Rating:</label>
-            <input type="text" name="rating" id="rating">
+    <form method="POST" class="modern-form">
+        <div class="form-group">
+            <label for="name">Film-Titel</label>
+            <div class="input-wrapper">
+                <span class="input-icon">🎬</span>
+                <input type="text" id="name" name="name" required 
+                       placeholder="Geben Sie den Filmtitel ein"
+                       class="modern-input">
+            </div>
+            <p class="input-hint">Der Film wird automatisch in der OMDB-Datenbank gesucht</p>
+        </div>
 
-            <label for="plot">Plot:</label>
-            <textarea name="plot" id="plot" rows="3"></textarea>
+        <div class="form-actions">
+            <button type="submit" class="submit-button">
+                <span class="submit-icon">✓</span>
+                Film hinzufügen
+            </button>
+            <a href="/movies" class="cancel-button">
+                <span class="cancel-icon">✕</span>
+                Abbrechen
+            </a>
+        </div>
+    </form>
 
-            <label for="country">Country:</label>
-            <input type="text" name="country" id="country">
+    {% if success %}
+    <div class="success-message glass-card">
+        <span class="success-icon">✓</span>
+        Film "{{ movie_name }}" wurde erfolgreich hinzugefügt!
+    </div>
+    {% endif %}
 
-            <label for="genre">Genre:</label>
-            <input type="text" name="genre" id="genre">
-
-            <label for="poster">Poster URL:</label>
-            <input type="text" name="poster" id="poster">
-
-            <button type="submit" class="save-btn">Save Movie</button>
-        </form>
-    </main>
-</body>
-</html>
+    {% if error %}
+    <div class="error-message glass-card">
+        <span class="error-icon">⚠️</span>
+        {{ error }}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

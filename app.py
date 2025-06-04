@@ -1,8 +1,9 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
+from sqlalchemy.orm import joinedload
 
 from ai_request import AIRequest
 from datamanager.sqlite_data_manager import SQliteDataManager
-from data_models import User, Movie
+from data_models import User, Movie, UserMovie
 from movie_api import OMDBClient
 
 app = Flask(__name__)
@@ -24,14 +25,29 @@ def internal_server_error(e):
 # Home Route with simple navigation
 @app.route('/')
 def home():
-    return render_template("home.html")
+    """
+    Render the home page with movie and user statistics.
+    """
+    movies = data_manager.movies
+    users = data_manager.users
+    return render_template("home.html", movies=movies, users=users)
 
 
 # Users in a list view
 @app.route('/users')
 def list_users():
-    users = data_manager.users
-    return render_template("users.html",users=users)
+    with data_manager.SessionFactory() as session:
+        users = session.query(User).all()
+        # Hole für jeden User die Anzahl der Filme (ohne Lazy Loading)
+        user_data = []
+        for user in users:
+            movie_count = session.query(UserMovie).filter_by(user_id=user.id).count()
+            user_data.append({
+                "id": user.id,
+                "name": user.name,
+                "movie_count": movie_count
+            })
+    return render_template("users.html", users=user_data)
 
 
 # User movies in a list view
@@ -209,7 +225,33 @@ def recommendation(user_id):
         return render_template("recommend.html", user=chosen, movie=recommend["movie"], reasoning=recommend["reasoning"])
 
 
-if __name__ == "__main__":
+# API Route für Film-Empfehlungen
+@app.route('/api/recommendations/<movie_id>', methods=['GET'])
+def get_movie_recommendations(movie_id):
+    try:
+        # Hole den Film aus der Datenbank
+        movie = data_manager.get_movie(movie_id)
+        if not movie:
+            return jsonify({'error': 'Film nicht gefunden'}), 404
 
+        # Erstelle einen String mit den Film-Daten für die AI
+        data_string = f"Title: {movie.name}, Genre: {movie.genre}, Year: {movie.year}, Rating: {movie.rating},"
+        
+        # Hole eine Empfehlung von der AI
+        recommendation = AIRequest().ai_excluded_movie_request(data_string, movie.name)
+        
+        # Hole zusätzliche Informationen (Poster und IMDB-Rating) für den empfohlenen Film
+        poster = OMDBClient().get_movie(recommendation["movie"]["title"])
+        recommendation["movie"]["poster"] = poster["poster"]
+        recommendation["movie"]["imdb"] = poster["rating"]
+        
+        # Sende die Empfehlung als JSON zurück
+        return jsonify(recommendation)
+    except Exception as e:
+        # Bei einem Fehler sende eine Fehlermeldung zurück
+        return jsonify({'error': str(e)}), 500
+
+
+if __name__ == "__main__":
     app.run(debug=True,host="127.0.0.1",port=5000)
 

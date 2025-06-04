@@ -1,38 +1,98 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>{{ movie.name }} Details</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <header>
-        <h1 class="main-title">Movie Details</h1>
-        <nav class="nav-bar">
-            <a class="nav-btn" href="/">Home</a>
-            <a class="nav-btn" href="/movies">Movies</a>
-            <a class="nav-btn" href="/new_movie">Add Movie</a>
-            <a class="nav-btn" href="/new_user">New User</a>
-        </nav>
-    </header>
-    <main class="main-content">
-        <div class="movie-details-card">
-            <img src="{{ movie.poster }}" alt="{{ movie.name }}" class="movie-poster-details">
-            <ul>
-                <li><strong>Title:</strong> {{ movie.name }} ({{ movie.year }})</li>
-                <li><strong>Director:</strong> {{ movie.director }}</li>
-                <li><strong>Rating:</strong> {{ movie.rating }}</li>
-                <li><strong>Plot:</strong> {{ movie.plot }}</li>
-                <li><strong>Country:</strong> {{ movie.country }}</li>
-                <li><strong>Genre:</strong> {{ movie.genre }}</li>
-            </ul>
-            <form action="/movies" method="post" class="inline-form">
-                <button class="delete-btn" type="submit" id="movie_id" name="movie_id" value="{{ movie.id }}">
-                    Delete
-                </button>
-            </form>
-            <a class="back-btn" href="/movies">Back</a>
+{% extends "base.html" %}
+
+{% block title %}{{ movie.name }} - Details{% endblock %}
+
+{% block content %}
+<div class="movie-details-container glass-card fade-in">
+    <div class="movie-header">
+        <div class="movie-poster">
+            <img src="{{ movie.poster }}" alt="{{ movie.name }}">
+            <div class="movie-overlay">
+                <div class="movie-rating">
+                    <span class="rating-value">{{ movie.rating }}</span>
+                    <div class="rating-stars">
+                        {% for i in range(5) %}
+                            <span class="star {% if i < movie.rating/2 %}filled{% endif %}">★</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
         </div>
-    </main>
-</body>
-</html>
+        <div class="movie-info">
+            <h1>{{ movie.name }}</h1>
+            <div class="movie-meta">
+                <span class="year">{{ movie.year }}</span>
+                <span class="director">Regie: {{ movie.director }}</span>
+                <span class="country">{{ movie.country }}</span>
+            </div>
+            <div class="movie-genres">
+                {% for genre in movie.genre.split(',') %}
+                    <span class="genre-tag">{{ genre.strip() }}</span>
+                {% endfor %}
+            </div>
+            <p class="movie-plot">{{ movie.plot }}</p>
+        </div>
+    </div>
+
+    <div class="movie-actions">
+        <form action="{{ url_for('movie_details', movie_id=movie.id) }}" method="POST">
+            <input type="hidden" name="movie_id" value="{{ movie.id }}">
+            <button type="submit" class="delete">Film löschen</button>
+        </form>
+        
+        <button class="ai-recommend-btn" onclick="showRecommendationModal()">
+            <span class="ai-icon">🤖</span>
+            Ähnliche Filme vorschlagen
+        </button>
+    </div>
+</div>
+
+<!-- AI Empfehlungs-Modal -->
+<div id="recommendationModal" class="modal">
+    <div class="modal-content glass-card">
+        <span class="close">&times;</span>
+        <h2>Film-Empfehlungen</h2>
+        <div id="recommendationContent">
+            <div class="loading-spinner"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showRecommendationModal() {
+    const modal = document.getElementById('recommendationModal');
+    modal.style.display = "block";
+    
+    // AI-Empfehlung anfordern
+    fetch(`/api/recommendations/{{ movie.id }}`)
+        .then(response => response.json())
+        .then(data => {
+            const content = document.getElementById('recommendationContent');
+            content.innerHTML = `
+                <div class="recommendation-card">
+                    <img src="${data.movie.poster}" alt="${data.movie.title}">
+                    <h3>${data.movie.title}</h3>
+                    <p>${data.reasoning}</p>
+                </div>
+            `;
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('recommendationContent').innerHTML = 
+                '<p class="error">Entschuldigung, es gab einen Fehler bei der Empfehlung.</p>';
+        });
+}
+
+// Modal schließen
+document.querySelector('.close').onclick = function() {
+    document.getElementById('recommendationModal').style.display = "none";
+}
+
+window.onclick = function(event) {
+    const modal = document.getElementById('recommendationModal');
+    if (event.target == modal) {
+        modal.style.display = "none";
+    }
+}
+</script>
+{% endblock %}

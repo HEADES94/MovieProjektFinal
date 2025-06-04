@@ -1,42 +1,50 @@
 {% extends "base.html" %}
-{% block title %}{{user.name}} - Movie List{% endblock %}
+
+{% block title %}{{ movie.name }} bewerten - MovieProjekt{% endblock %}
 
 {% block content %}
-    <h1 class="title" style="text-align: center;">{{user.name}} - Movie List</h1>
-
-    <header>
-        {% if success == True %}
-            <p>Movie updated successfully!</p>
-        {% elif success == False %}
-            <p>Failed to update movie. {{error}}. <br>
-                Please try again!</p>
-        {% elif success == None %}
-        {% endif %}
-
-    </header>
-
-            <img height="200" alt="{{ movie.name }}" src="{{ movie.poster }}">
-            <ul><li>{{ movie.name }} ({{ movie.year }})</li>
-            <li>Director: {{ movie.director }}</li>
-                <li>Plot: {{ movie.plot }}</li>
-                <li>Country: {{ movie.country }}</li>
-                <li>Genre: {{ movie.genre }}</li>
-            <li>Rating: {{ movie.rating }} </li>
-            <li>User Rating: {{ user_movie.user_rating }}</li>
-                {% if user_movie.user_comment %}
-                <li>User Comment: {{ user_movie.user_comment }}</li>
-                {% endif %}
-            <li><form action="/users/{{user.id}}/{{movie.id}}"
-                                                 method="POST">
-                <label for="user_rating">New User Rating:</label>
-                <input type="text" id="user_rating" name="user_rating" min="0.1" max="10.0"
-                       step="0.1" required><br><br>
-                <label for="user_comment">New User Comment:</label>
-                <textarea id="user_comment" name="user_comment" rows="4" cols="50"
-                          placeholder="Enter your comment"></textarea>
-                <button type="submit">Update</button></form></li>
-                <button type="submit" class="back_button">
-                    <a href="/users/{{user.id}}">Back</a></button>
-            </ul>
-
+<div class="user-movie-detail-container glass-card fade-in">
+    <div class="movie-header">
+        <div class="movie-poster">
+            <img src="{{ movie.poster }}" alt="{{ movie.name }}">
+        </div>
+        <div class="movie-info">
+            <h1>{{ movie.name }}</h1>
+            <div class="movie-meta">
+                <span class="year">{{ movie.year }}</span>
+                <span class="genre">{{ movie.genre }}</span>
+            </div>
+            <p class="movie-plot">{{ movie.plot }}</p>
+        </div>
+    </div>
+    <form method="POST" class="modern-form">
+        <div class="form-group">
+            <label for="user_rating">Deine Bewertung (0-10)</label>
+            <input type="number" id="user_rating" name="user_rating" min="0" max="10" step="0.1" value="{{ user_movie.user_rating }}" class="modern-input">
+        </div>
+        <div class="form-group">
+            <label for="user_comment">Kommentar</label>
+            <textarea id="user_comment" name="user_comment" rows="2" class="modern-input">{{ user_movie.user_comment }}</textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="submit-button">
+                <span class="submit-icon">✓</span>
+                Bewertung speichern
+            </button>
+            <a href="/users/{{ user.id }}" class="cancel-button">Zurück</a>
+        </div>
+    </form>
+    {% if success %}
+    <div class="success-message glass-card">
+        <span class="success-icon">✓</span>
+        Bewertung gespeichert!
+    </div>
+    {% endif %}
+    {% if error %}
+    <div class="error-message glass-card">
+        <span class="error-icon">⚠️</span>
+        {{ error }}
+    </div>
+    {% endif %}
+</div>
 {% endblock %}

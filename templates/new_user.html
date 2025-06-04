@@ -1,30 +1,49 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Add New User</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <header>
-        <h1 class="main-title">Add New User</h1>
-        <nav class="nav-bar">
-            <a class="nav-btn" href="/">Home</a>
-            <a class="nav-btn" href="/movies">Movies</a>
-            <a class="nav-btn" href="/new_movie">Add Movie</a>
-            <a class="nav-btn" href="/new_user">New User</a>
-        </nav>
-    </header>
-    <main class="main-content">
-        <form class="user-form" action="/new_user" method="post">
-            <label for="username">User Name:</label>
-            <input type="text" name="username" id="username" required>
+{% extends "base.html" %}
 
-            <label for="email">E-Mail:</label>
-            <input type="email" name="email" id="email" required>
+{% block title %}Neuer Benutzer - MovieProjekt{% endblock %}
 
-            <button type="submit" class="save-btn">Save User</button>
-        </form>
-    </main>
-</body>
-</html>
+{% block content %}
+<div class="form-container glass-card fade-in">
+    <div class="form-header">
+        <h1>Neuen Benutzer erstellen</h1>
+        <p class="form-subtitle">Werden Sie Teil unserer Film-Community</p>
+    </div>
+
+    <form method="POST" class="modern-form">
+        <div class="form-group">
+            <label for="name">Benutzername</label>
+            <div class="input-wrapper">
+                <span class="input-icon">👤</span>
+                <input type="text" id="name" name="name" required 
+                       placeholder="Geben Sie Ihren Namen ein"
+                       class="modern-input">
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="submit-button">
+                <span class="submit-icon">✓</span>
+                Benutzer erstellen
+            </button>
+            <a href="/users" class="cancel-button">
+                <span class="cancel-icon">✕</span>
+                Abbrechen
+            </a>
+        </div>
+    </form>
+
+    {% if success %}
+    <div class="success-message glass-card">
+        <span class="success-icon">✓</span>
+        Benutzer wurde erfolgreich erstellt!
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="error-message glass-card">
+        <span class="error-icon">⚠️</span>
+        {{ error }}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

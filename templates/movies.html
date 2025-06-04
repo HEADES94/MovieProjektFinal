@@ -1,31 +1,41 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Movie List</title>
-    <link rel="stylesheet" href="static/style.css">
-</head>
-<body>
-    <header>
-        <h1 class="main-title">Movie Library</h1>
-        <nav class="nav-bar">
-            <a class="nav-btn" href="/">Home</a>
-            <a class="nav-btn" href="/movies">Movies</a>
-            <a class="nav-btn" href="/new_movie">Add Movie</a>
-            <a class="nav-btn" href="/new_user">New User</a>
-        </nav>
-    </header>
-    <main class="main-content">
-        <div class="movie-list">
-            {% for movie in movies %}
-            <div class="movie-card">
-                <img src="{{ movie.poster }}" alt="{{ movie.name }}" class="movie-poster-small">
-                <h3>{{ movie.name }}</h3>
-                <p>{{ movie.year }}</p>
-                <a class="details-btn" href="/movies/{{ movie.id }}">Details</a>
+{% extends "base.html" %}
+
+{% block title %}Filme - MovieProjekt{% endblock %}
+
+{% block content %}
+<div class="movies-container fade-in">
+    <div class="movies-header glass-card">
+        <h1>Alle Filme</h1>
+        <a href="/movies/new" class="add-button">
+            <span class="add-icon">+</span>
+            Neuen Film hinzufügen
+        </a>
+    </div>
+    <div class="movie-list">
+        {% for movie in movies %}
+        <div class="movie-card glass-card">
+            <div class="movie-poster">
+                <img src="{{ movie.poster }}" alt="{{ movie.name }}">
             </div>
-            {% endfor %}
+            <div class="movie-info">
+                <h3>{{ movie.name }}</h3>
+                <div class="movie-meta">
+                    <span class="year">{{ movie.year }}</span>
+                    <span class="genre">{{ movie.genre }}</span>
+                </div>
+                <div class="movie-actions">
+                    <a href="/movies/{{ movie.id }}" class="view-button">
+                        <span class="view-icon">👁️</span>
+                        Details
+                    </a>
+                    <form action="/movies" method="POST" style="display:inline;">
+                        <input type="hidden" name="movie_id" value="{{ movie.id }}">
+                        <button type="submit" class="delete">Löschen</button>
+                    </form>
+                </div>
+            </div>
         </div>
-    </main>
-</body>
-</html>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

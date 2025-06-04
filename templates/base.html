@@ -1,25 +1,62 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{% block title %}{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
     <script src="{{ url_for('static', filename='action.js') }}"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-<canvas id="pixelCanvas"></canvas>
-
+<div class="animated-bg"></div>
+<div class="logo-bar">
+    <span class="logo-icon">🎬</span>
+    <span class="logo-text">MovieProjekt</span>
+    {% if request.path != '/' %}
+    <a href="/" class="home-button" title="Zur Startseite">
+        <span class="home-icon">🏠</span>
+    </a>
+    {% endif %}
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <svg id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5" />
+            <path d="M12 1v2m0 18v2m11-11h-2M3 12H1m16.95 7.07l-1.41-1.41M6.34 6.34l-1.41-1.41m12.02 0l-1.41 1.41M6.34 17.66l-1.41 1.41" />
+        </svg>
+        <svg id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+            <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 109.79 9.79z" />
+        </svg>
+    </button>
+</div>
 <main class="main-content-container">
-<header class="topnav">
-  {% set path = request.path %}
-  <a href="/" class="{% if path == '/' %}active{% endif %}">Home</a>
-  <a href="/users" class="{% if path.startswith('/users') and not path.endswith('/new') %}active{% endif %}">Users</a>
-  <a href="/movies" class="{% if path.startswith('/movies') and not path.endswith('/new') %}active{% endif %}">Movies</a>
-  <a href="/users/new" class="{% if path == '/users/new' %}active{% endif %}">New User</a>
-  <a href="/movies/new" class="{% if path == '/movies/new' %}active{% endif %}">New Movie</a>
-</header>
     {% block content %}{% endblock %}
 </main>
+<script>
+const themeToggle = document.getElementById('themeToggle');
+const iconSun = document.getElementById('icon-sun');
+const iconMoon = document.getElementById('icon-moon');
+
+function setThemeIcon(theme) {
+    if (theme === 'dark') {
+        iconSun.style.display = 'none';
+        iconMoon.style.display = 'block';
+    } else {
+        iconSun.style.display = 'block';
+        iconMoon.style.display = 'none';
+    }
+}
+
+themeToggle.addEventListener('click', function() {
+    const html = document.documentElement;
+    const currentTheme = html.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    setThemeIcon(newTheme);
+});
+const savedTheme = localStorage.getItem('theme') || 'dark';
+document.documentElement.setAttribute('data-theme', savedTheme);
+setThemeIcon(savedTheme);
+</script>
 </body>
 </html>

@@ -1,18 +1,46 @@
+{#
+    users.html - Zeigt alle Benutzer mit Anzahl ihrer Filme an.
+    Erwartet: users = Liste von Dicts mit id, name, movie_count
+#}
+{% extends "base.html" %}
 
-<div class="user-page-container">
-    <h1 class="main-title">User List</h1>
-    <div class="user-actions">
-        <a href="/" class="btn">🏠 Home</a>
-        <a href="/users/new" class="btn btn-blue">➕ Add User</a>
+{% block title %}Benutzer - MovieProjekt{% endblock %}
+
+{% block content %}
+<div class="users-container fade-in">
+    <div class="users-header glass-card">
+        <h1>Unsere Benutzer</h1>
+        <a href="/users/new" class="add-button">
+            <span class="add-icon">+</span>
+            Neuer Benutzer
+        </a>
     </div>
-    <ul class="user-list">
+
+    <div class="users-grid">
         {% for user in users %}
-            <li>
-                <a href="/users/{{ user.id }}" class="user-link">{{ user.name }}</a>
-            </li>
-        {% else %}
-            <li class="user-empty">No users found.</li>
+        <div class="user-card glass-card">
+            <div class="user-avatar">
+                {{ user.name[0]|upper }}
+            </div>
+            <div class="user-info">
+                <h3>{{ user.name }}</h3>
+                <p class="user-movies-count">
+                    {{ user.movie_count }} Filme in der Sammlung
+                </p>
+            </div>
+            <div class="user-actions">
+                <a href="/users/{{ user.id }}" class="view-button">
+                    <span class="view-icon">👁️</span>
+                    Filme anzeigen
+                </a>
+                <a href="/users/{{ user.id }}/recommend_movie" class="ai-button">
+                    <span class="ai-icon">🤖</span>
+                    Empfehlungen
+                </a>
+            </div>
+        </div>
         {% endfor %}
-    </ul>
+    </div>
 </div>
+{% endblock %}
 

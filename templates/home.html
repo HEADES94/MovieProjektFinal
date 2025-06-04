@@ -1,27 +1,44 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>MovieWeb Home</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <header>
-        <h1>MovieWeb</h1>
-        <nav class="nav-bar">
-            <a href="/" class="nav-btn">Home</a>
-            <a href="/movies" class="nav-btn">Movies</a>
-            <a href="/users" class="nav-btn">Users</a>
-            <a href="/movies/new" class="nav-btn">Add Movie</a>
-            <a href="/users/new" class="nav-btn">Add User</a>
-        </nav>
-    </header>
-    <main>
-        <img src="/static/homepic.jpg" alt="MovieWeb" class="home-pic">
-        <section class="welcome-section">
-            <h2>Welcome to MovieWeb!</h2>
-            <p>Your platform for exploring movies and managing your collection.</p>
-        </section>
-    </main>
-</body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}MovieProjekt - Home{% endblock %}
+
+{% block content %}
+<div class="hero-section glass-card fade-in">
+    <div class="hero-content">
+        <h1 class="main-title">Willkommen bei MovieProjekt</h1>
+        <p class="hero-subtitle">Entdecken Sie Ihre nächsten Lieblingsfilme</p>
+        <div class="hero-actions">
+            <a href="/movies" class="cta-button primary">Filme entdecken</a>
+            <a href="/users" class="cta-button secondary">Benutzer anzeigen</a>
+        </div>
+    </div>
+    <div class="hero-stats glass-card">
+        <div class="stat-item">
+            <span class="stat-number">{{ movies|length }}</span>
+            <span class="stat-label">Filme</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-number">{{ users|length }}</span>
+            <span class="stat-label">Benutzer</span>
+        </div>
+    </div>
+</div>
+
+<div class="features-section">
+    <div class="feature-card glass-card">
+        <div class="feature-icon">🎬</div>
+        <h3>Film-Entdeckung</h3>
+        <p>Entdecken Sie neue Filme basierend auf Ihren Vorlieben</p>
+    </div>
+    <div class="feature-card glass-card">
+        <div class="feature-icon">🤖</div>
+        <h3>KI-Empfehlungen</h3>
+        <p>Personalisierte Filmempfehlungen durch künstliche Intelligenz</p>
+    </div>
+    <div class="feature-card glass-card">
+        <div class="feature-icon">⭐</div>
+        <h3>Bewertungen</h3>
+        <p>Teilen Sie Ihre Meinung und sehen Sie Bewertungen anderer</p>
+    </div>
+</div>
+{% endblock %}
