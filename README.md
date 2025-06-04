@@ -41,8 +41,6 @@ python app.py
 - Das Projekt ist PEP8-konform und gut dokumentiert.
 - Für eigene Anpassungen siehe die Dateien im `templates/` und `static/` Ordner.
 
-## Screenshots
-*(Hier kannst du eigene Screenshots einfügen)*
 
 ---
 **Viel Spaß mit MovieProjekt!**
