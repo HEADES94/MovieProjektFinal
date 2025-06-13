@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Meine Achievements - MovieProjekt{% endblock %}
+
+{% block content %}
+<div class="achievements-container fade-in">
+    <div class="header-section glass-card">
+        <h1>Meine Achievements</h1>
+        <div class="achievement-stats">
+            <span class="achievement-count">{{ user_achievements|length }} von {{ all_achievements|length }} Errungenschaften</span>
+        </div>
+    </div>
+
+    {% if all_achievements and all_achievements|length > 0 %}
+    <div class="achievements-progress glass-card">
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: {{ (user_achievements|length / all_achievements|length * 100)|round }}%"></div>
+        </div>
+        <span class="progress-text">{{ (user_achievements|length / all_achievements|length * 100)|round }}% abgeschlossen</span>
+    </div>
+    {% else %}
+    <div class="achievements-progress glass-card">
+        <p>Noch keine Achievements verfügbar.</p>
+    </div>
+    {% endif %}
+
+    <div class="achievements-grid">
+        {% if all_achievements %}
+            {% for achievement in all_achievements %}
+            <div class="achievement-card glass-card {% if achievement in user_achievements %}achieved{% endif %}">
+                <div class="achievement-icon">{{ achievement.title.split(' ')[0] }}</div>
+                <div class="achievement-info">
+                    <h3>{{ achievement.title.split(' ', 1)[1] }}</h3>
+                    <p>{{ achievement.description }}</p>
+                    {% if achievement in user_achievements %}
+                        <span class="achievement-status achieved">Freigeschaltet</span>
+                    {% else %}
+                        <span class="achievement-status locked">Noch nicht freigeschaltet</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p>Keine Achievements verfügbar.</p>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.achievements-container {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    display: grid;
+    gap: 2rem;
+}
+
+.header-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2rem;
+    border-radius: 16px;
+}
+
+.achievement-stats {
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+}
+
+.achievements-progress {
+    padding: 1.5rem;
+    border-radius: 16px;
+    text-align: center;
+}
+
+.progress-bar {
+    height: 8px;
+    background: var(--bg-glass);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(to right, var(--primary), var(--secondary));
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.achievements-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.achievement-card {
+    display: flex;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    transition: transform 0.3s ease;
+    border-radius: 16px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(10px);
+}
+
+.achievement-card:hover {
+    transform: translateY(-5px);
+}
+
+.achievement-card.locked {
+    opacity: 0.7;
+}
+
+.achievement-icon {
+    font-size: 2.5rem;
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(45deg, var(--primary), var(--secondary));
+    border-radius: 50%;
+    color: white;
+}
+
+.achievement-info {
+    flex: 1;
+}
+
+.achievement-info h3 {
+    margin: 0 0 0.5rem;
+    color: var(--text-primary);
+}
+
+.achievement-info p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.achievement-status {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.achievement-status.achieved {
+    background: var(--success);
+    color: white;
+}
+
+.achievement-status.locked {
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+    .header-section {
+        flex-direction: column;
+        text-align: center;
+        gap: 1rem;
+    }
+
+    .achievements-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+// Animation für neu erhaltene Achievements
+document.addEventListener('DOMContentLoaded', function() {
+    const newAchievements = document.querySelectorAll('.achievement-card.earned:not(.shown)');
+    newAchievements.forEach(card => {
+        card.classList.add('achievement-animation');
+        card.classList.add('shown');
+    });
+});
+</style>
+{% endblock %}

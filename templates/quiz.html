@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+
+{% block title %}Quiz: {{ movie.title }}{% endblock %}
+
+{% block head %}
+<script src="{{ url_for('static', filename='quiz.js') }}" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="quiz-container glass-card fade-in">
+    <!-- Quiz Header -->
+    <div class="quiz-header glass-card">
+        <div class="quiz-movie-info">
+            <img src="{{ movie.poster_url }}" alt="{{ movie.title }}" class="quiz-movie-poster">
+            <div>
+                <h1 class="gradient-text">Quiz: {{ movie.title }}</h1>
+                <div class="quiz-meta">
+                    <div class="difficulty-selector">
+                        <label for="difficulty">Schwierigkeitsgrad:</label>
+                        <select id="difficulty" class="glass-select">
+                            <option value="easy">Leicht (5 Fragen, 10 Punkte/Frage)</option>
+                            <option value="medium">Mittel (10 Fragen, 50 Punkte/Frage)</option>
+                            <option value="hard">Schwer (15 Fragen, 100 Punkte/Frage)</option>
+                        </select>
+                    </div>
+                    {% if highscores %}
+                    <span class="highscore">🏆 Highscore: {{ highscores[0].best_score }}</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <button id="startQuiz" class="btn-primary">Quiz starten</button>
+    </div>
+
+    <!-- Question Section -->
+    <div class="question-section glass-card" style="display: none;">
+        <div class="quiz-progress">
+            <div class="progress-bar">
+                <div class="progress" style="width: 0%"></div>
+            </div>
+            <div class="progress-text">
+                <span class="question-counter">Frage 1/{{ questions|length }}</span>
+                <span class="current-score">0 Punkte</span>
+            </div>
+        </div>
+
+        <div id="questionContainer" class="question-container">
+            {% for question in questions %}
+            <div class="question" data-question-id="{{ loop.index0 }}" style="display: {% if loop.first %}block{% else %}none{% endif %}">
+                <h3 class="question-text">{{ question.question_text }}</h3>
+                <div class="answers-grid">
+                    {% set answers = [question.correct_answer, question.wrong_answer_1, question.wrong_answer_2, question.wrong_answer_3]|shuffle %}
+                    {% for answer in answers %}
+                    <button class="answer-btn glass-button"
+                            data-answer="{{ answer }}"
+                            data-correct="{{ 'true' if answer == question.correct_answer else 'false' }}"
+                            {% if not current_user.is_authenticated %}disabled{% endif %}>
+                        {{ answer }}
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Results Section (initially hidden) -->
+    <div id="quizResults" class="quiz-results glass-card" style="display: none;">
+        <h2 class="gradient-text">Quiz beendet!</h2>
+        <div class="results-content">
+            <div class="score-display">
+                <span class="final-score gradient-text">0</span>
+                <span class="points-label">Punkte</span>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-item glass-card-inner">
+                    <span class="stat-label">Richtige Antworten</span>
+                    <span class="correct-answers">0/{{ questions|length }}</span>
+                </div>
+                <div class="stat-item glass-card-inner">
+                    <span class="stat-label">Genauigkeit</span>
+                    <span class="accuracy">0%</span>
+                </div>
+            </div>
+            {% if achievements %}
+            <div class="achievements-earned">
+                <h3>🏆 Errungenschaften freigeschaltet!</h3>
+                <div class="achievements-grid">
+                    {% for achievement in achievements %}
+                    <div class="achievement-item glass-card-inner">
+                        <img src="{{ achievement.icon_url }}" alt="{{ achievement.title }}">
+                        <div class="achievement-info">
+                            <h4>{{ achievement.title }}</h4>
+                            <p>{{ achievement.description }}</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            <div class="action-buttons">
+                <button onclick="location.reload()" class="btn-primary">🔄 Noch einmal spielen</button>
+                <a href="{{ url_for('quiz_home') }}" class="btn-secondary">🏠 Zur Übersicht</a>
+            </div>
+        </div>
+    </div>
+
+    {% if not current_user.is_authenticated %}
+    <div class="login-prompt glass-card">
+        <p>Melde dich an, um am Quiz teilzunehmen und Punkte zu sammeln!</p>
+        <a href="{{ url_for('login') }}" class="btn-primary">Jetzt anmelden</a>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.quiz-container {
+    max-width: 800px;
+    margin: 2rem auto;
+    padding: 2rem;
+}
+
+.quiz-header {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.quiz-movie-info {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+    width: 100%;
+}
+
+.quiz-movie-poster {
+    width: 120px;
+    height: auto;
+    border-radius: 8px;
+}
+
+.quiz-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.difficulty-selector {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.glass-select {
+    padding: 0.5rem;
+    border: none;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    color: var(--text-primary);
+    min-width: 200px;
+}
+
+#startQuiz {
+    padding: 1rem 2rem;
+    font-size: 1.1rem;
+    background: linear-gradient(45deg, var(--primary), var(--secondary));
+    border: none;
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+    transition: transform 0.2s, opacity 0.2s;
+    display: block;
+    margin-top: 1rem;
+}
+
+#startQuiz:hover {
+    transform: translateY(-2px);
+    opacity: 0.9;
+}
+
+.question-section {
+    padding: 2rem;
+    margin-bottom: 2rem;
+}
+
+.progress-bar {
+    height: 8px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.progress {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), var(--secondary));
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    display: flex;
+    justify-content: space-between;
+    color: var(--text-secondary);
+    margin-bottom: 2rem;
+}
+
+.question-text {
+    font-size: 1.25rem;
+    margin-bottom: 2rem;
+    line-height: 1.6;
+}
+
+.answers-grid {
+    display: grid;
+    gap: 1rem;
+}
+
+.quiz-results {
+    text-align: center;
+    padding: 2rem;
+}
+
+.score-display {
+    margin-bottom: 2rem;
+}
+
+.final-score {
+    font-size: 4rem;
+    font-weight: bold;
+    display: block;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-top: 2rem;
+}
+
+.achievements-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+
+.achievement-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    text-align: left;
+}
+
+.achievement-item img {
+    width: 48px;
+    height: 48px;
+}
+
+.login-prompt {
+    text-align: center;
+    padding: 2rem;
+    margin-top: 2rem;
+}
+
+@media (max-width: 768px) {
+    .quiz-movie-info {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .action-buttons {
+        flex-direction: column;
+    }
+
+    .answers-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}

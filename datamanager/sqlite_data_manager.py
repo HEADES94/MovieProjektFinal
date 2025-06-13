@@ -1,340 +1,262 @@
 """
-sqlite_data_manager.py - Datenmanager für SQLite-Operationen in MovieProjekt
+sqlite_data_manager.py - SQLite-Implementierung des DataManager-Interfaces
 """
+from contextlib import contextmanager
+from typing import List, Optional, Dict
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from contextlib import contextmanager
-from typing import List, Dict, Any, Type, Optional
 
-from data_models import Base, User, Movie, UserMovie
+from .data_manager_interface import DataManagerInterface
+from data_models import Base, User, Movie, UserMovie, Achievement
 from movie_api import OMDBClient
-from datamanager.data_manager_interface import DataManagerInterface
-
-# Define the database connection string.
-TEST_DB_URL = "sqlite:///:memory:"
 
 class SQliteDataManager(DataManagerInterface):
-    """
-    Datenmanager für alle Datenbankoperationen (CRUD) mit SQLite.
-    """
+    """SQLite-Implementierung des DataManager-Interfaces."""
+
     def __init__(self, db_url: str):
-        """
-        Initialisiere den Datenmanager mit einer Datenbank-URL.
-        """
+        """Initialisiere die Datenbankverbindung."""
         self.engine = create_engine(db_url)
-        self.SessionFactory = sessionmaker(bind=self.engine, expire_on_commit=False)
         Base.metadata.create_all(self.engine)
+        self.SessionFactory = sessionmaker(bind=self.engine)
+        self.omdb_client = OMDBClient()
+        self._init_achievements()
 
     @contextmanager
-    def get_db(self):
-        """
-        Kontextmanager für eine Datenbank-Session.
-        """
+    def get_session(self):
+        """Context Manager für Datenbank-Sessions."""
         session = self.SessionFactory()
         try:
             yield session
             session.commit()
-        except Exception:
+        except:
             session.rollback()
-            raise ConnectionError("Database connection error!")
+            raise
         finally:
             session.close()
 
     @property
-    def users(self) -> List[Type[User]]:
-        """
-        Gibt alle User-Objekte zurück.
-        Returns:
-            list: Liste von User-Objekten
-        """
-        with self.SessionFactory() as session:
-            users = session.query(User).all()
-            return users
-
-    def get_user(self, user_id: int) -> Optional[User]:
-        """
-        Hole einen User anhand der ID.
-        Args:
-            user_id (int): Die User-ID.
-        Returns:
-            User oder None
-        """
-        with self.SessionFactory() as session:
-            user = session.query(User).filter_by(id=user_id).first()
-            return user
-
-    def add_user(self, user: User) -> None:
-        """
-        Füge einen User zur Datenbank hinzu.
-        Args:
-            user (User): Das User-Objekt.
-        """
-        with self.SessionFactory() as session:
-            session.add(user)
-            session.commit()
+    def users(self) -> List[User]:
+        """Property für alle Benutzer."""
+        with self.get_session() as session:
+            return session.query(User).all()
 
     @property
-    def movies(self) -> List[Type[Movie]]:
-        """
-        Gibt alle Movie-Objekte zurück.
-        Returns:
-            list: Liste von Movie-Objekten
-        """
-        with self.SessionFactory() as session:
+    def movies(self) -> List[Movie]:
+        """Property für alle Filme."""
+        with self.get_session() as session:
             return session.query(Movie).all()
 
-    def set_user_movies(self, user_id: int, movie_id: int, user_rating: float = 0.0) -> Optional[str]:
-        """
-        Füge einen Film zur User-Liste hinzu oder aktualisiere die Bewertung.
-        Args:
-            user_id (int): Die User-ID.
-            movie_id (int): Die Movie-ID.
-            user_rating (float): Bewertung des Users.
-        Returns:
-            Optional[str]: Fehlermeldung oder None bei Erfolg.
-        """
-        with self.SessionFactory() as session:
-            user = session.query(User).filter_by(id=user_id).first()
-            movie = session.query(Movie).filter_by(id=movie_id).first()
-            if user and movie:
-                existing_associations = session.query(UserMovie).filter_by(
-                    user_id=user_id, movie_id=movie_id
-                ).first()
-                if existing_associations:
-                    # Update bestehende Assoziation
-                    session.query(UserMovie).filter_by(user_id=user_id, movie_id=movie_id).update(
-                        {"user_rating": user_rating}
-                    )
-                else:
-                    # Neue Assoziation anlegen
-                    association = UserMovie(user_id=user_id, movie_id=movie_id,
-                                            user_rating=user_rating)
-                    session.add(association)
-                session.commit()
-            elif movie is None:
-                return "Failed to add movie, check ID and try again!"
-            else:
-                return "User not found."
+    def get_user(self, user_id: int) -> Optional[User]:
+        """Hole einen Benutzer anhand seiner ID."""
+        with self.get_session() as session:
+            return session.query(User).get(user_id)
 
-    def get_user_movies(self, user_id: int) -> List[Dict[str, Any]]:
-        """
-        Hole alle Filme eines Users mit Bewertung und Kommentar.
-        Args:
-            user_id (int): Die User-ID.
-        Returns:
-            list: Liste von Dictionaries mit Filmdetails und User-Bewertung
-        """
-        with self.SessionFactory() as session:
-            user_movies = session.query(UserMovie).filter_by(user_id=user_id).all()
-            if user_movies:
-                movies_with_ratings = []
-                for association in user_movies:
-                    movie = session.query(Movie).filter_by(id=association.movie_id).first()
-                    if movie:
-                        movies_with_ratings.append({
-                            "id": movie.id,
-                            "name": movie.name,
-                            "director": movie.director,
-                            "year": movie.year,
-                            "poster": movie.poster,
-                            "genre": movie.genre,
-                            "country": movie.country,
-                            "plot": movie.plot,
-                            "rating": movie.rating,
-                            "user_rating": association.user_rating,
-                            "user_comment": association.user_comment if association.user_comment else None
-                        })
-                return movies_with_ratings
-            return []
-
-    def get_user_movie(self, user_id: int, movie_id: int) -> Dict[str, Any]:
-        """
-        Hole die UserMovie-Relation für einen bestimmten User und Film.
-        Args:
-            user_id (int): Die User-ID.
-            movie_id (int): Die Movie-ID.
-        Returns:
-            dict: Details zum Film und zur Bewertung/Kommentar des Users
-        """
-        with self.SessionFactory() as session:
-            user_movie = session.query(UserMovie).filter_by(user_id=user_id, movie_id=movie_id).first()
-            if user_movie:
-                movie = session.query(Movie).filter_by(id=movie_id).first()
-                return {
-                    "id": movie.id,
-                    "name": movie.name,
-                    "director": movie.director,
-                    "year": movie.year,
-                    "poster": movie.poster,
-                    "genre": movie.genre,
-                    "country": movie.country,
-                    "plot": movie.plot,
-                    "rating": movie.rating,
-                    "user_rating": user_movie.user_rating,
-                    "user_comment": user_movie.user_comment if user_movie.user_comment else None
-                }
-            return {}
-
-    def set_movie(self, movie_title: str) -> Optional[Movie]:
-        """
-        Füge einen neuen Film zur Datenbank hinzu (oder hole ihn, falls schon vorhanden).
-        Args:
-            movie_title (str): Titel des Films.
-        Returns:
-            Movie oder None
-        """
-        with self.SessionFactory() as session:
-            movie = session.query(Movie).filter_by(name=movie_title).first()
-            if movie:
-                return movie
-            new_movie = OMDBClient().get_movie(title=movie_title)
-            if new_movie is None:
-                raise ValueError("Movie not found")
-            movie = Movie(**new_movie)
-            session.add(movie)
-            session.commit()
-        return movie
-
-    def update_user_movie(self, user_id: int, movie_id: int, update_data: dict) -> Optional[dict]:
-        """
-        Aktualisiere Bewertung/Kommentar eines Users zu einem Film.
-        Args:
-            user_id (int): Die User-ID.
-            movie_id (int): Die Movie-ID.
-            update_data (dict): Felder zum Aktualisieren.
-        Returns:
-            dict: Die aktualisierten Filmdaten
-        """
-        with self.SessionFactory() as session:
-            movie = session.query(Movie).filter_by(id=movie_id).first()
-            if movie:
-                session.query(UserMovie).filter_by(user_id=user_id,
-                                                   movie_id=movie_id).update(update_data)
-                session.commit()
-                return {
-                    "id": movie.id,
-                    "name": movie.name,
-                    "director": movie.director,
-                    "year": movie.year,
-                    "poster": movie.poster,
-                    "genre": movie.genre,
-                    "country": movie.country,
-                    "plot": movie.plot,
-                    "rating": movie.rating,
-                    "user_rating": update_data.get("user_rating", 0.0),
-                    "user_comment": update_data.get("user_comment", None)
-                }
-            return None
-
-    def delete_movie(self, movie_id: int) -> bool:
-        """
-        Lösche einen Film aus der Datenbank (inkl. aller User-Relationen).
-        Args:
-            movie_id (int): Die Movie-ID.
-        Returns:
-            bool: True bei Erfolg, sonst False
-        """
-        with self.SessionFactory() as session:
-            movie = session.query(Movie).filter_by(id=movie_id).first()
-            if movie:
-                session.flush()
-                session.query(UserMovie).filter_by(movie_id=movie_id).delete()
-                session.query(Movie).filter_by(id=movie_id).delete()
-                session.commit()
-                return True
-            return False
-
-    def delete_user(self, user_id: int) -> bool:
-        """
-        Lösche einen User aus der Datenbank (inkl. aller User-Relationen).
-        Args:
-            user_id (int): Die User-ID.
-        Returns:
-            bool: True bei Erfolg, sonst False
-        """
-        with self.SessionFactory() as session:
-            user = session.query(User).filter_by(id=user_id).first()
-            if user:
-                session.flush()
-                session.query(UserMovie).filter_by(user_id=user_id).delete()
-                session.query(User).filter_by(id=user_id).delete()
-                session.commit()
-                return True
-            return False
-
-    def delete_user_movie(self, user_id: int, movie_id: int) -> bool:
-        """
-        Lösche die UserMovie-Relation für einen bestimmten User und Film.
-        Args:
-            user_id (int): Die User-ID.
-            movie_id (int): Die Movie-ID.
-        Returns:
-            bool: True bei Erfolg, sonst False
-        """
-        with self.SessionFactory() as session:
-            association = session.query(UserMovie).filter_by(user_id=user_id, movie_id=movie_id).first()
-            if association:
-                session.delete(association)
-                session.commit()
-                return True
-            return False
+    def get_users(self) -> List[User]:
+        """Hole alle Benutzer."""
+        with self.get_session() as session:
+            return session.query(User).all()
 
     def get_movie(self, movie_id: int) -> Optional[Movie]:
+        """Hole einen Film anhand seiner ID."""
+        with self.get_session() as session:
+            return session.query(Movie).get(movie_id)
+
+    def get_movies(self) -> List[Movie]:
+        """Hole alle Filme."""
+        with self.get_session() as session:
+            return session.query(Movie).all()
+
+    def get_user_movies(self, user_id: int) -> List[Dict]:
+        """Hole alle Filme eines Benutzers mit Bewertungen."""
+        with self.get_session() as session:
+            user_movies = session.query(UserMovie).filter_by(user_id=user_id).all()
+            result = []
+            for um in user_movies:
+                movie = session.query(Movie).get(um.movie_id)
+                if movie:
+                    result.append({
+                        "id": movie.id,
+                        "name": movie.title,
+                        "director": movie.director,
+                        "year": movie.release_year,
+                        "poster": movie.poster_url,
+                        "rating": movie.rating,
+                        "genre": movie.genre,
+                        "country": movie.country,
+                        "plot": movie.plot,
+                        "user_rating": um.user_rating,
+                        "user_comment": um.user_comment
+                    })
+            return result
+
+    def get_user_movie(self, user_id: int, movie_id: int) -> Optional[Dict]:
+        """Hole einen spezifischen Film eines Benutzers mit Bewertung."""
+        with self.get_session() as session:
+            user_movie = session.query(UserMovie).filter_by(
+                user_id=user_id, movie_id=movie_id).first()
+            if not user_movie:
+                return None
+
+            movie = session.query(Movie).get(movie_id)
+            if not movie:
+                return None
+
+            return {
+                "id": movie.id,
+                "name": movie.title,
+                "director": movie.director,
+                "year": movie.release_year,
+                "poster": movie.poster_url,
+                "rating": movie.rating,
+                "genre": movie.genre,
+                "country": movie.country,
+                "plot": movie.plot,
+                "user_rating": user_movie.user_rating,
+                "user_comment": user_movie.user_comment
+            }
+
+    def set_movie(self, title: str) -> Optional[Movie]:
         """
-        Hole einen Film anhand der ID.
-        Args:
-            movie_id (int): Die Movie-ID.
-        Returns:
-            Movie oder None
+        Füge einen neuen Film hinzu oder aktualisiere einen bestehenden.
+        Holt die Filmdaten von der OMDB API.
         """
+        # Prüfe zuerst, ob der Film bereits existiert
+        existing_movie = self.get_movie_by_title(title)
+        if existing_movie:
+            print(f"Film bereits vorhanden: {title}")
+            return existing_movie
+
+        # Hole Filmdaten von OMDB
+        movie_data = self.omdb_client.get_movie(title)
+        if not movie_data:
+            print(f"Keine OMDB-Daten gefunden für: {title}")
+            return None
+
+        try:
+            with self.get_session() as session:
+                movie = Movie(
+                    title=movie_data["name"],
+                    director=movie_data["director"],
+                    release_year=int(movie_data["year"][:4]) if movie_data["year"] else None,
+                    genre=movie_data["genre"],
+                    poster_url=movie_data["poster"],
+                    rating=float(movie_data["rating"]) if movie_data["rating"] != "N/A" else None,
+                    country=movie_data["country"],
+                    plot=movie_data["plot"],
+                    description=movie_data["plot"]  # Füge die Beschreibung auch zum description-Feld hinzu
+                )
+                session.add(movie)
+                session.commit()
+                print(f"Film hinzugefügt: {movie.title}")
+                return movie
+        except Exception as e:
+            print(f"Fehler beim Hinzufügen von {title}: {str(e)}")
+            return None
+
+    def set_user_movies(self, user_id: int, movie_id: int) -> bool:
+        """Füge einen Film zur Liste eines Benutzers hinzu."""
+        with self.get_session() as session:
+            existing = session.query(UserMovie).filter_by(
+                user_id=user_id, movie_id=movie_id).first()
+            if existing:
+                return False
+
+            user_movie = UserMovie(user_id=user_id, movie_id=movie_id)
+            session.add(user_movie)
+            session.commit()
+            return True
+
+    def update_user_movie(self, user_id: int, movie_id: int, update_data: Dict) -> bool:
+        """Aktualisiere die Bewertung eines Films für einen Benutzer."""
+        with self.get_session() as session:
+            user_movie = session.query(UserMovie).filter_by(
+                user_id=user_id, movie_id=movie_id).first()
+            if not user_movie:
+                return False
+
+            for key, value in update_data.items():
+                setattr(user_movie, key, value)
+            session.commit()
+            return True
+
+    def delete_movie(self, movie_id: int) -> bool:
+        """Lösche einen Film und alle zugehörigen Bewertungen."""
+        with self.get_session() as session:
+            movie = session.query(Movie).get(movie_id)
+            if not movie:
+                return False
+
+            session.query(UserMovie).filter_by(movie_id=movie_id).delete()
+            session.delete(movie)
+            session.commit()
+            return True
+
+    def delete_user_movie(self, user_id: int, movie_id: int) -> bool:
+        """Lösche einen Film aus der Liste eines Benutzers."""
+        with self.get_session() as session:
+            user_movie = session.query(UserMovie).filter_by(
+                user_id=user_id, movie_id=movie_id).first()
+            if not user_movie:
+                return False
+
+            session.delete(user_movie)
+            session.commit()
+            return True
+
+    def get_movie_by_title(self, title: str) -> Optional[Movie]:
+        """Hole einen Film anhand seines Titels."""
+        with self.get_session() as session:
+            return session.query(Movie).filter(Movie.title.ilike(f"%{title}%")).first()
+
+    def _init_achievements(self):
+        """Initialisiert die Standard-Achievements."""
+        achievements = [
+            {
+                "title": "🎯 Perfect Quiz",
+                "description": "Erreiche die perfekte Punktzahl in einem Quiz!",
+                "icon_url": "/static/img/trophy_perfect.png"
+            },
+            {
+                "title": "🏆 First Highscore",
+                "description": "Erreiche deinen ersten Highscore!",
+                "icon_url": "/static/img/trophy_first.png"
+            },
+            {
+                "title": "👑 Quiz Master",
+                "description": "Erreiche in 5 verschiedenen Quizzen mindestens 400 Punkte!",
+                "icon_url": "/static/img/trophy_master.png"
+            },
+            {
+                "title": "🎓 Quiz Profi",
+                "description": "Schließe ein schweres Quiz mit mindestens 1000 Punkten ab!",
+                "icon_url": "/static/img/trophy_expert.png"
+            },
+            {
+                "title": "📚 Wissensdurst",
+                "description": "Beantworte 100 Fragen korrekt!",
+                "icon_url": "/static/img/trophy_knowledge.png"
+            },
+            {
+                "title": "🎬 Film Enthusiast",
+                "description": "Schließe Quizze zu 10 verschiedenen Filmen ab!",
+                "icon_url": "/static/img/trophy_movie.png"
+            },
+            {
+                "title": "🌟 Perfektionist",
+                "description": "Erreiche 3 perfekte Quizze in Folge!",
+                "icon_url": "/static/img/trophy_perfectionist.png"
+            },
+            {
+                "title": "🔥 Streak Master",
+                "description": "Beantworte 20 Fragen in Folge richtig!",
+                "icon_url": "/static/img/trophy_streak.png"
+            }
+        ]
         with self.SessionFactory() as session:
-            movie = session.query(Movie).filter_by(id=movie_id).first()
-            return movie
-
-def main():
-    data_manager = SQliteDataManager("sqlite:///movie_app.db")
-
-    with data_manager.SessionFactory() as session:
-        # Create some users
-        user1 = User(name="Joshi")
-        user2 = User(name="Icke")
-        data_manager.add_user(user1)
-        data_manager.add_user(user2)
-        session.add_all([user1, user2])
-        session.commit()
-
-        # Create some movies
-        movie1 = data_manager.set_movie("The Matrix")
-        movie2 = data_manager.set_movie("Interstellar")
-
-        # Associate movies with users and assign ratings
-        print(f"user1:{user1}, movie1:{movie1}")
-        data_manager.set_user_movies(user1.id, movie1.id)
-        print(data_manager.get_user_movies(user1.id))
-        data_manager.set_user_movies(user1.id, movie2.id, 8.5)
-        data_manager.set_user_movies(user2.id, movie2.id, 9.2)
-
-        # Get and print user movies (use a new session for querying)
-
-        print("Alice's movies:", data_manager.get_user_movies(user1.id))
-        print("Bob's movies:", data_manager.get_user_movies(user2.id))
-
-        # Get and print all movies
-        print("All movies:", session.query(Movie).all())
-
-        # Example of updating a movie (use a new session)
-        updated_movie = data_manager.update_user_movie(user1.id, movie1.id,
-                                                      {"user_rating":
-                                                          7.2})
-        print("Updated movie:", updated_movie)
-
-        # Example of deleting a movie (use a new session)
-        deleted = data_manager.delete_movie(movie1.id)
-        print("Deleted movie1:", deleted)
-
-        print("All movies after deletion:", session.query(Movie).all())
-
-
-if __name__ == "__main__":
-    main()
-
+            for achievement_data in achievements:
+                existing = session.query(Achievement).filter_by(
+                    title=achievement_data["title"]).first()
+                if not existing:
+                    achievement = Achievement(**achievement_data)
+                    session.add(achievement)
+            session.commit()

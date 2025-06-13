@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Frage vorschlagen: {{ movie.title }} - MovieProjekt{% endblock %}
+
+{% block content %}
+<div class="suggest-container fade-in">
+    <div class="header-section glass-card">
+        <div class="movie-info">
+            <img src="{{ movie.poster_url }}" alt="{{ movie.title }}" class="movie-poster">
+            <div class="movie-details">
+                <h1>Quiz-Frage vorschlagen</h1>
+                <h2>{{ movie.title }}</h2>
+            </div>
+        </div>
+    </div>
+
+    {% if success %}
+    <div class="alert alert-success glass-card">
+        {{ message }}
+        <a href="/movies/{{ movie.id }}/quiz" class="btn-secondary">Zurück zum Quiz</a>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="alert alert-error glass-card">
+        <h3>Dein Vorschlag konnte nicht angenommen werden:</h3>
+        <p>{{ feedback }}</p>
+    </div>
+    {% endif %}
+
+    <div class="form-section glass-card">
+        <form method="POST" class="suggest-form">
+            <div class="form-group glass-card-inner">
+                <label for="question_text">Deine Frage:</label>
+                <textarea id="question_text" name="question_text" required
+                          placeholder="z.B.: Wer spielt die Hauptrolle in diesem Film?"></textarea>
+                <div class="helper-text">
+                    Stelle eine interessante Frage, die sich auf den Film bezieht.
+                </div>
+            </div>
+
+            <div class="form-group glass-card-inner">
+                <label for="correct_answer">Richtige Antwort:</label>
+                <input type="text" id="correct_answer" name="correct_answer" required
+                       placeholder="Die korrekte Antwort">
+            </div>
+
+            <div class="wrong-answers glass-card-inner">
+                <label>Falsche Antworten:</label>
+                <div class="wrong-answers-grid">
+                    <input type="text" name="wrong_answer_1" required
+                           placeholder="Falsche Antwort 1">
+                    <input type="text" name="wrong_answer_2" required
+                           placeholder="Falsche Antwort 2">
+                    <input type="text" name="wrong_answer_3" required
+                           placeholder="Falsche Antwort 3">
+                </div>
+                <div class="helper-text">
+                    Die falschen Antworten sollten plausibel klingen, aber eindeutig falsch sein.
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Frage einreichen</button>
+                <a href="/movies/{{ movie.id }}/quiz" class="btn-secondary">Abbrechen</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="guidelines glass-card">
+        <h3>Richtlinien für gute Quiz-Fragen</h3>
+        <ul>
+            <li>Die Frage sollte klar und eindeutig formuliert sein</li>
+            <li>Alle Antwortmöglichkeiten sollten etwa gleich lang sein</li>
+            <li>Vermeide sehr offensichtliche falsche Antworten</li>
+            <li>Die Frage sollte sich auf den Film beziehen</li>
+            <li>Keine spoilerhaften Fragen zum Filmende</li>
+        </ul>
+    </div>
+</div>
+
+<style>
+.suggest-container {
+    max-width: 800px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    display: grid;
+    gap: 2rem;
+}
+
+.header-section {
+    padding: 2rem;
+    border-radius: 16px;
+}
+
+.movie-info {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2rem;
+    align-items: center;
+}
+
+.movie-poster {
+    width: 150px;
+    border-radius: 8px;
+    box-shadow: var(--shadow-lg);
+}
+
+.form-section {
+    padding: 2rem;
+}
+
+.suggest-form {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.form-group {
+    display: grid;
+    gap: 0.5rem;
+}
+
+textarea, input {
+    padding: 0.75rem 1rem;
+    border: none;
+    border-radius: 8px;
+    background: var(--bg-glass);
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+
+textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+.wrong-answers-grid {
+    display: grid;
+    gap: 1rem;
+}
+
+.helper-text {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-top: 0.5rem;
+}
+
+.guidelines {
+    padding: 2rem;
+}
+
+.guidelines ul {
+    margin-top: 1rem;
+    padding-left: 1.5rem;
+    color: var(--text-secondary);
+}
+
+.guidelines li {
+    margin-bottom: 0.5rem;
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    margin-top: 1rem;
+}
+
+@media (max-width: 768px) {
+    .movie-info {
+        grid-template-columns: 1fr;
+        text-align: center;
+    }
+
+    .movie-poster {
+        margin: 0 auto;
+    }
+}
+</style>
+{% endblock %}

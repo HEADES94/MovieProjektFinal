@@ -3,47 +3,126 @@
 {% block title %}Neuer Benutzer - MovieProjekt{% endblock %}
 
 {% block content %}
-<div class="form-container glass-card fade-in">
-    <div class="form-header">
-        <h1>Neuen Benutzer erstellen</h1>
-        <p class="form-subtitle">Werden Sie Teil unserer Film-Community</p>
-    </div>
+<div class="new-user-container fade-in">
+    <div class="form-card glass-card">
+        <h1>Neuen Benutzer anlegen</h1>
 
-    <form method="POST" class="modern-form">
-        <div class="form-group">
-            <label for="name">Benutzername</label>
-            <div class="input-wrapper">
-                <span class="input-icon">👤</span>
-                <input type="text" id="name" name="name" required 
-                       placeholder="Geben Sie Ihren Namen ein"
-                       class="modern-input">
+        {% if success %}
+        <div class="alert alert-success glass-card-inner">
+            Benutzer wurde erfolgreich angelegt!
+            <a href="/users" class="btn-secondary">Zur Benutzerübersicht</a>
+        </div>
+        {% endif %}
+
+        {% if error %}
+        <div class="alert alert-error glass-card-inner">
+            Fehler: {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="POST" class="user-form">
+            <div class="form-group glass-card-inner">
+                <label for="name">Benutzername</label>
+                <input type="text" id="name" name="name" required
+                       placeholder="z.B. Max Mustermann" class="form-input">
             </div>
-        </div>
 
-        <div class="form-actions">
-            <button type="submit" class="submit-button">
-                <span class="submit-icon">✓</span>
-                Benutzer erstellen
-            </button>
-            <a href="/users" class="cancel-button">
-                <span class="cancel-icon">✕</span>
-                Abbrechen
-            </a>
-        </div>
-    </form>
-
-    {% if success %}
-    <div class="success-message glass-card">
-        <span class="success-icon">✓</span>
-        Benutzer wurde erfolgreich erstellt!
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Benutzer anlegen</button>
+                <a href="/users" class="btn-secondary">Abbrechen</a>
+            </div>
+        </form>
     </div>
-    {% endif %}
-
-    {% if error %}
-    <div class="error-message glass-card">
-        <span class="error-icon">⚠️</span>
-        {{ error }}
-    </div>
-    {% endif %}
 </div>
+
+<style>
+.new-user-container {
+    max-width: 600px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+
+.form-card {
+    padding: 2rem;
+    border-radius: 16px;
+    backdrop-filter: blur(10px);
+}
+
+.form-card h1 {
+    margin: 0 0 2rem;
+    color: var(--text-primary);
+    text-align: center;
+}
+
+.user-form {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.form-group {
+    display: grid;
+    gap: 0.5rem;
+    padding: 1.5rem;
+    border-radius: 12px;
+}
+
+.form-group label {
+    color: var(--text-primary);
+    font-weight: bold;
+}
+
+.form-input {
+    padding: 0.75rem 1rem;
+    border: none;
+    border-radius: 8px;
+    background: var(--bg-glass);
+    color: var(--text-primary);
+    font-size: 1rem;
+    transition: box-shadow 0.3s ease;
+}
+
+.form-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--primary);
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    margin-top: 1rem;
+}
+
+.alert {
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.alert-success {
+    background: var(--success);
+    color: white;
+}
+
+.alert-error {
+    background: var(--warning);
+    color: white;
+}
+
+.alert a {
+    color: white;
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.2);
+    transition: background-color 0.3s ease;
+}
+
+.alert a:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+</style>
 {% endblock %}

@@ -8,39 +8,106 @@
 
 {% block content %}
 <div class="users-container fade-in">
-    <div class="users-header glass-card">
-        <h1>Unsere Benutzer</h1>
-        <a href="/users/new" class="add-button">
-            <span class="add-icon">+</span>
-            Neuer Benutzer
-        </a>
+    <div class="section-header glass-card">
+        <h1>Benutzer Übersicht</h1>
+        <a href="/users/new" class="btn-primary">Neuen Benutzer anlegen</a>
     </div>
 
     <div class="users-grid">
         {% for user in users %}
-        <div class="user-card glass-card">
+        <div class="user-card glass-card fade-in">
             <div class="user-avatar">
-                {{ user.name[0]|upper }}
+                <span class="avatar-text">{{ user.username[:1].upper() if user.username else '?' }}</span>
             </div>
-            <div class="user-info">
-                <h3>{{ user.name }}</h3>
-                <p class="user-movies-count">
-                    {{ user.movie_count }} Filme in der Sammlung
-                </p>
-            </div>
-            <div class="user-actions">
-                <a href="/users/{{ user.id }}" class="view-button">
-                    <span class="view-icon">👁️</span>
-                    Filme anzeigen
-                </a>
-                <a href="/users/{{ user.id }}/recommend_movie" class="ai-button">
-                    <span class="ai-icon">🤖</span>
-                    Empfehlungen
-                </a>
+            <div class="user-content">
+                <h3>{{ user.username if user.username else 'Unbekannter Benutzer' }}</h3>
+                <div class="user-stats">
+                    <span class="movie-count">🎬 {{ user.movie_count }} Filme</span>
+                </div>
+                <div class="user-actions">
+                    <a href="/users/{{ user.id }}" class="btn-secondary">Filme anzeigen</a>
+                    <a href="/users/{{ user.id }}/recommend_movie" class="btn-primary">Film empfehlen</a>
+                </div>
             </div>
         </div>
         {% endfor %}
     </div>
 </div>
-{% endblock %}
 
+<style>
+.users-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    border-radius: 16px;
+}
+
+.users-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 2rem;
+}
+
+.user-card {
+    display: flex;
+    align-items: center;
+    padding: 1.5rem;
+    border-radius: 16px;
+    transition: transform 0.3s ease;
+}
+
+.user-card:hover {
+    transform: translateY(-5px);
+}
+
+.user-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 1.5rem;
+}
+
+.avatar-text {
+    font-size: 1.5rem;
+    color: white;
+    font-weight: bold;
+}
+
+.user-content {
+    flex: 1;
+}
+
+.user-content h3 {
+    margin: 0 0 0.5rem;
+    color: var(--text-primary);
+}
+
+.user-stats {
+    margin-bottom: 1rem;
+    color: var(--text-secondary);
+}
+
+.user-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+@media (max-width: 768px) {
+    .users-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}

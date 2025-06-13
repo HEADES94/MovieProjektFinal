@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}Quiz - MovieProjekt{% endblock %}
+
+{% block content %}
+<div class="section">
+    <div class="hero glass-card fade-in">
+        <h1>Film-Quiz</h1>
+        <p>Teste dein Filmwissen und sammle Punkte!</p>
+    </div>
+
+    {% if user_stats %}
+    <div class="stats-grid">
+        <div class="stat-card fade-in">
+            <div class="stat-number">{{ user_stats.total_quizzes }}</div>
+            <div class="stat-label">Gespielte Quizze</div>
+        </div>
+        <div class="stat-card fade-in">
+            <div class="stat-number">{{ user_stats.total_score }}</div>
+            <div class="stat-label">Gesamtpunkte</div>
+        </div>
+        <div class="stat-card fade-in">
+            <div class="stat-number">{{ "%.1f"|format(user_stats.average_score|float) }}%</div>
+            <div class="stat-label">Durchschnitt</div>
+        </div>
+        <div class="stat-card fade-in">
+            <div class="stat-number">{{ user_stats.perfect_scores }}</div>
+            <div class="stat-label">Perfekte Scores</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="section-header glass-card">
+        <h2 class="section-title">Verfügbare Quizze</h2>
+    </div>
+
+    <div class="movie-grid">
+        {% for quiz in quizzes %}
+        <div class="movie-card fade-in">
+            <div class="movie-poster">
+                <img src="{{ quiz.movie.poster_url }}" alt="{{ quiz.movie.title }}">
+            </div>
+            <div class="movie-info">
+                <h3 class="movie-title">{{ quiz.movie.title }}</h3>
+                <div class="movie-meta">
+                    <span>{{ quiz.question_count }} Fragen</span>
+                    <div class="movie-rating">
+                        <span class="star">🏆</span>
+                        <span>{{ quiz.highscore }}</span>
+                    </div>
+                </div>
+                <a href="{{ url_for('movie_quiz', movie_id=quiz.movie.id) }}" class="quiz-start-btn">
+                    <span class="quiz-icon">🎮</span>
+                    Quiz starten
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if not quizzes %}
+    <div class="empty-state glass-card fade-in">
+        <div class="empty-state-icon">🎯</div>
+        <h2>Keine Quizze verfügbar</h2>
+        <p>Füge neue Filme hinzu, um Quizze zu generieren!</p>
+        <a href="{{ url_for('new_movie') }}" class="btn btn-primary">Film hinzufügen</a>
+    </div>
+    {% endif %}
+
+    {% if highscores %}
+    <div class="section-header glass-card">
+        <h2 class="section-title">Letzte Highscores</h2>
+    </div>
+
+    <div class="leaderboard">
+        {% for score in highscores %}
+        <div class="leaderboard-item fade-in">
+            <div class="rank {% if loop.index == 1 %}first{% elif loop.index == 2 %}second{% elif loop.index == 3 %}third{% endif %}">
+                {{ loop.index }}
+            </div>
+            <div class="player-info">
+                <div class="player-avatar">{{ score.user.username[:2].upper() }}</div>
+                <div>
+                    <div>{{ score.user.username }}</div>
+                    <div class="movie-title">{{ score.movie.title }}</div>
+                </div>
+            </div>
+            <div class="score">{{ score.best_score }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.movie-card {
+    border-radius: 16px;
+    overflow: hidden;
+    background: var(--card-background);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease;
+}
+
+.movie-card:hover {
+    transform: translateY(-5px);
+}
+
+.movie-poster {
+    position: relative;
+    aspect-ratio: 2/3;
+}
+
+.movie-poster img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.movie-info {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.movie-title {
+    font-size: 1.25rem;
+    font-weight: bold;
+    margin: 0;
+}
+
+.movie-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--text-secondary);
+}
+
+.quiz-start-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: linear-gradient(45deg, var(--primary), var(--secondary));
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: transform 0.2s;
+    margin-top: auto;
+}
+
+.quiz-start-btn:hover {
+    transform: translateY(-2px);
+    opacity: 0.9;
+}
+
+.quiz-icon {
+    font-size: 1.2em;
+}
+
+.movie-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 2rem;
+    padding: 2rem 0;
+}
+</style>
+{% endblock %}

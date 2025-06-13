@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Registrieren - MovieProjekt{% endblock %}
+
+{% block content %}
+<div class="auth-container glass-card fade-in">
+    <h2>Registrieren</h2>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <form method="POST" class="auth-form">
+        <div class="form-group">
+            <label for="username">Benutzername</label>
+            <input type="text" id="username" name="username" required>
+        </div>
+
+        <div class="form-group">
+            <label for="email">E-Mail</label>
+            <input type="email" id="email" name="email" required>
+        </div>
+
+        <div class="form-group">
+            <label for="password">Passwort</label>
+            <input type="password" id="password" name="password" required>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Registrieren</button>
+    </form>
+
+    <div class="auth-links">
+        <p>Bereits registriert? <a href="{{ url_for('login') }}" class="btn-secondary">Anmelden</a></p>
+    </div>
+</div>
+{% endblock %}

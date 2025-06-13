@@ -1,98 +1,253 @@
 {% extends "base.html" %}
 
-{% block title %}{{ movie.name }} - Details{% endblock %}
+{% block title %}{{ movie.title }} - CineQuiz{% endblock %}
 
 {% block content %}
-<div class="movie-details-container glass-card fade-in">
-    <div class="movie-header">
-        <div class="movie-poster">
-            <img src="{{ movie.poster }}" alt="{{ movie.name }}">
-            <div class="movie-overlay">
-                <div class="movie-rating">
-                    <span class="rating-value">{{ movie.rating }}</span>
-                    <div class="rating-stars">
-                        {% for i in range(5) %}
-                            <span class="star {% if i < movie.rating/2 %}filled{% endif %}">★</span>
-                        {% endfor %}
-                    </div>
+<div class="movie-details-container">
+    <div class="movie-hero glass-card">
+        <div class="movie-hero-content">
+            <img src="{{ movie.poster_url }}" alt="{{ movie.title }}" class="movie-poster">
+            <div class="movie-info">
+                <h1 class="gradient-text">{{ movie.title }}</h1>
+                <div class="movie-meta">
+                    <span class="year">{{ movie.release_year }}</span>
+                    <span class="rating">⭐ {{ "%.1f"|format(movie.rating|float) }}/10</span>
+                </div>
+                <div class="genre-tags">
+                    <span class="genre-tag">{{ movie.genre }}</span>
+                </div>
+                {% if movie.description %}
+                <p class="movie-plot">{{ movie.description }}</p>
+                {% else %}
+                <p class="movie-plot">Keine Beschreibung verfügbar.</p>
+                {% endif %}
+                <div class="action-buttons">
+                    <a href="{{ url_for('movie_quiz', movie_id=movie.id) }}" class="btn-primary quiz-start-btn">
+                        🎮 Quiz starten
+                    </a>
+                    {% if current_user.is_authenticated %}
+                    <form action="{{ url_for('add_to_watchlist', movie_id=movie.id) }}" method="POST" style="display: inline;">
+                        <button type="submit" class="btn-secondary watchlist-btn">
+                            {% if movie.in_watchlist %}
+                            ✓ In Watchlist
+                            {% else %}
+                            + Zur Watchlist
+                            {% endif %}
+                        </button>
+                    </form>
+                    {% endif %}
                 </div>
             </div>
         </div>
-        <div class="movie-info">
-            <h1>{{ movie.name }}</h1>
-            <div class="movie-meta">
-                <span class="year">{{ movie.year }}</span>
-                <span class="director">Regie: {{ movie.director }}</span>
-                <span class="country">{{ movie.country }}</span>
-            </div>
-            <div class="movie-genres">
-                {% for genre in movie.genre.split(',') %}
-                    <span class="genre-tag">{{ genre.strip() }}</span>
-                {% endfor %}
-            </div>
-            <p class="movie-plot">{{ movie.plot }}</p>
+    </div>
+
+    <div class="movie-stats-grid">
+        <div class="stat-card glass-card">
+            <div class="stat-value gradient-text">{{ stats.quiz_attempts }}</div>
+            <div class="stat-label">Quiz-Versuche</div>
+        </div>
+        <div class="stat-card glass-card">
+            <div class="stat-value gradient-text">{{ stats.avg_score }}</div>
+            <div class="stat-label">Ø Punktzahl</div>
+        </div>
+        <div class="stat-card glass-card">
+            <div class="stat-value gradient-text">{{ stats.completion_rate }}%</div>
+            <div class="stat-label">Abschlussrate</div>
         </div>
     </div>
 
-    <div class="movie-actions">
-        <form action="{{ url_for('movie_details', movie_id=movie.id) }}" method="POST">
-            <input type="hidden" name="movie_id" value="{{ movie.id }}">
-            <button type="submit" class="delete">Film löschen</button>
-        </form>
-        
-        <button class="ai-recommend-btn" onclick="showRecommendationModal()">
-            <span class="ai-icon">🤖</span>
-            Ähnliche Filme vorschlagen
-        </button>
-    </div>
-</div>
-
-<!-- AI Empfehlungs-Modal -->
-<div id="recommendationModal" class="modal">
-    <div class="modal-content glass-card">
-        <span class="close">&times;</span>
-        <h2>Film-Empfehlungen</h2>
-        <div id="recommendationContent">
-            <div class="loading-spinner"></div>
-        </div>
-    </div>
-</div>
-
-<script>
-function showRecommendationModal() {
-    const modal = document.getElementById('recommendationModal');
-    modal.style.display = "block";
-    
-    // AI-Empfehlung anfordern
-    fetch(`/api/recommendations/{{ movie.id }}`)
-        .then(response => response.json())
-        .then(data => {
-            const content = document.getElementById('recommendationContent');
-            content.innerHTML = `
-                <div class="recommendation-card">
-                    <img src="${data.movie.poster}" alt="${data.movie.title}">
-                    <h3>${data.movie.title}</h3>
-                    <p>${data.reasoning}</p>
+    {% if quiz_history %}
+    <div class="quiz-history glass-card">
+        <h2>Deine Quiz-Historie</h2>
+        <div class="quiz-attempts">
+            {% for attempt in quiz_history %}
+            <div class="quiz-attempt">
+                <div class="attempt-date">{{ attempt.date }}</div>
+                <div class="attempt-score">{{ attempt.score }} Punkte</div>
+                <div class="attempt-progress">
+                    <div class="progress-bar" style="width: {{ attempt.progress }}%"></div>
                 </div>
-            `;
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            document.getElementById('recommendationContent').innerHTML = 
-                '<p class="error">Entschuldigung, es gab einen Fehler bei der Empfehlung.</p>';
-        });
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.movie-details-container {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 0 1rem;
 }
 
-// Modal schließen
-document.querySelector('.close').onclick = function() {
-    document.getElementById('recommendationModal').style.display = "none";
+.movie-hero {
+    position: relative;
+    overflow: hidden;
+    border-radius: 16px;
+    margin-bottom: 2rem;
+    background: var(--card-background);
 }
 
-window.onclick = function(event) {
-    const modal = document.getElementById('recommendationModal');
-    if (event.target == modal) {
-        modal.style.display = "none";
+.movie-hero-content {
+    display: flex;
+    gap: 2rem;
+    padding: 2rem;
+}
+
+.movie-poster {
+    width: 300px;
+    height: 450px;
+    object-fit: cover;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.movie-info {
+    flex: 1;
+}
+
+.movie-info h1 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+}
+
+.movie-meta {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    color: var(--text-secondary);
+}
+
+.genre-tags {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.genre-tag {
+    padding: 0.25rem 0.75rem;
+    background: var(--primary);
+    color: white;
+    border-radius: 16px;
+    font-size: 0.875rem;
+}
+
+.movie-plot {
+    font-size: 1rem;
+    line-height: 1.6;
+    margin-bottom: 2rem;
+    color: var(--text-secondary);
+}
+
+.action-buttons {
+    display: flex;
+    gap: 1rem;
+}
+
+.btn-primary {
+    padding: 0.75rem 1.5rem;
+    background: linear-gradient(45deg, var(--primary), var(--secondary));
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: transform 0.2s;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+}
+
+.btn-secondary {
+    padding: 0.75rem 1.5rem;
+    background: var(--card-background);
+    border: 2px solid var(--primary);
+    color: var(--primary);
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-secondary:hover {
+    background: var(--primary);
+    color: white;
+}
+
+.movie-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    padding: 1.5rem;
+    text-align: center;
+    border-radius: 16px;
+    background: var(--card-background);
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+}
+
+.stat-label {
+    color: var(--text-secondary);
+}
+
+.quiz-history {
+    padding: 1.5rem;
+    border-radius: 16px;
+    background: var(--card-background);
+}
+
+.quiz-history h2 {
+    margin-bottom: 1rem;
+}
+
+.quiz-attempt {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.quiz-attempt:last-child {
+    border-bottom: none;
+}
+
+.attempt-progress {
+    flex: 1;
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    background: linear-gradient(45deg, var(--primary), var(--secondary));
+}
+
+@media (max-width: 768px) {
+    .movie-hero-content {
+        flex-direction: column;
+    }
+
+    .movie-poster {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 2/3;
     }
 }
-</script>
+</style>
 {% endblock %}

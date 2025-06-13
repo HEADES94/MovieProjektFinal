@@ -1,24 +1,159 @@
 {% extends "base.html" %}
-{% block title %}{{user.name}} - Movie Recommendation{% endblock %}
+
+{% block title %}Filmempfehlung für {{ user.name }} - MovieProjekt{% endblock %}
+
 {% block content %}
-    <h1 class="title" style="text-align: center;">{{user.name}} - Movie Recommendation</h1>
+<div class="recommendation-container fade-in">
+    <div class="section-header glass-card">
+        <h1>Filmempfehlung für {{ user.name }}</h1>
+        <form method="POST" class="search-form">
+            <input type="text" name="name" placeholder="Film ausschließen..." class="search-input">
+            <button type="submit" class="btn-primary">Neue Empfehlung</button>
+        </form>
+    </div>
 
-    <img height="200" alt="{{ movie.title }}" src="{{ movie.poster }}">
-            <ul><li>{{ movie.title }} ({{ movie.year }})</li>
-            <li>Director: {{ movie.director }}</li>
-            <li>Imdb: {{ movie.imdb }} </li>
-              <li>Plot: {{ movie.plot }}</li>
-              <li>Country: {{ movie.country }}</li>
-              <li>Genre: {{ movie.genre }}</li>
-              <li>Reasoning: {{ reasoning }}</li>
-            </ul>
-            <button type="submit" class="back_button"><a href="/users/{{user.id}}">Back</a></button>
-            <form action="/users/{{user.id}}" method="POST">
-            <button type="submit" id = "name" name = "name" value="{{ movie.title }}">
-                Add to {{user.name}} Movies List</button>
-            </form>
-            <form action="/users/{{user.id}}/recommend_movie" method="POST">
-            <button type="submit" id = "name" name = "name" value="{{ movie.title }}">Recommend different Movie</button>
-            </form>
+    {% if movie %}
+    <div class="recommendation-card glass-card fade-in">
+        <div class="movie-header">
+            <div class="movie-poster">
+                <img src="{{ movie.poster }}" alt="{{ movie.title }}">
+            </div>
+            <div class="movie-info">
+                <h2>{{ movie.title }}</h2>
+                <div class="movie-meta">
+                    <span>📅 {{ movie.year }}</span>
+                    <span>🎬 {{ movie.director }}</span>
+                    <span>🎭 {{ movie.genre }}</span>
+                    <span>🌍 {{ movie.country }}</span>
+                </div>
+                <div class="rating">
+                    <span class="rating-label">IMDB Rating:</span>
+                    <span class="rating-value">⭐ {{ movie.imdb }}/10</span>
+                </div>
+                <div class="plot glass-card-inner">
+                    <h3>Handlung</h3>
+                    <p>{{ movie.plot }}</p>
+                </div>
+                <div class="reasoning glass-card-inner">
+                    <h3>Warum dieser Film?</h3>
+                    <p>{{ reasoning }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="no-recommendation glass-card fade-in">
+        <p>Klicke auf "Neue Empfehlung" um eine KI-basierte Filmempfehlung zu erhalten.</p>
+    </div>
+    {% endif %}
+</div>
 
+<style>
+.recommendation-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    border-radius: 16px;
+}
+
+.search-form {
+    display: flex;
+    gap: 1rem;
+}
+
+.search-input {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 8px;
+    background: var(--bg-glass);
+    color: var(--text-primary);
+    backdrop-filter: blur(10px);
+}
+
+.recommendation-card {
+    padding: 2rem;
+    border-radius: 16px;
+}
+
+.movie-header {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 2rem;
+}
+
+.movie-poster img {
+    width: 100%;
+    border-radius: 8px;
+    box-shadow: var(--shadow-lg);
+}
+
+.movie-info h2 {
+    margin: 0 0 1rem;
+    color: var(--text-primary);
+}
+
+.movie-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    color: var(--text-secondary);
+}
+
+.rating {
+    margin-bottom: 1.5rem;
+}
+
+.rating-value {
+    color: var(--accent);
+    font-weight: bold;
+}
+
+.plot, .reasoning {
+    margin-bottom: 1.5rem;
+    padding: 1.5rem;
+    border-radius: 12px;
+}
+
+.plot h3, .reasoning h3 {
+    margin: 0 0 0.5rem;
+    color: var(--text-primary);
+}
+
+.plot p, .reasoning p {
+    margin: 0;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+.no-recommendation {
+    padding: 3rem;
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+    .section-header {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .movie-header {
+        grid-template-columns: 1fr;
+    }
+
+    .movie-poster {
+        max-width: 300px;
+        margin: 0 auto;
+    }
+}
+</style>
 {% endblock %}

@@ -1,44 +1,137 @@
 {% extends "base.html" %}
 
-{% block title %}MovieProjekt - Home{% endblock %}
+{% block title %}Home - MovieProjekt{% endblock %}
 
 {% block content %}
-<div class="hero-section glass-card fade-in">
-    <div class="hero-content">
-        <h1 class="main-title">Willkommen bei MovieProjekt</h1>
-        <p class="hero-subtitle">Entdecken Sie Ihre nächsten Lieblingsfilme</p>
-        <div class="hero-actions">
-            <a href="/movies" class="cta-button primary">Filme entdecken</a>
-            <a href="/users" class="cta-button secondary">Benutzer anzeigen</a>
-        </div>
+<!-- Hero Section -->
+<section class="hero">
+    <h1 class="gradient-text">Teste dein Filmwissen</h1>
+    <p>Entdecke neue Filme, beantworte KI-generierte Fragen und sammle Achievements!</p>
+    <div class="cta-buttons">
+        <a href="{{ url_for('quiz_home') }}" class="btn-primary">
+            🎯 Quiz starten
+        </a>
+        <a href="{{ url_for('list_movies') }}" class="btn-secondary">
+            🎬 Filme entdecken
+        </a>
     </div>
-    <div class="hero-stats glass-card">
-        <div class="stat-item">
-            <span class="stat-number">{{ movies|length }}</span>
-            <span class="stat-label">Filme</span>
-        </div>
-        <div class="stat-item">
-            <span class="stat-number">{{ users|length }}</span>
-            <span class="stat-label">Benutzer</span>
-        </div>
-    </div>
-</div>
+</section>
 
-<div class="features-section">
-    <div class="feature-card glass-card">
-        <div class="feature-icon">🎬</div>
-        <h3>Film-Entdeckung</h3>
-        <p>Entdecken Sie neue Filme basierend auf Ihren Vorlieben</p>
+<!-- Stats Dashboard -->
+{% if current_user.is_authenticated %}
+<section class="section">
+    <div class="stats-grid">
+        <div class="stat-card glass-card">
+            <div class="stat-number">{{ user_stats.reviews_count }}</div>
+            <div class="stat-label">Bewertete Filme</div>
+        </div>
+        <div class="stat-card glass-card">
+            <div class="stat-number">{{ user_stats.quiz_attempts }}</div>
+            <div class="stat-label">Gespielte Quizze</div>
+        </div>
+        <div class="stat-card glass-card">
+            <div class="stat-number">{{ user_stats.achievements }}</div>
+            <div class="stat-label">Errungenschaften</div>
+        </div>
+        <div class="stat-card glass-card">
+            <div class="stat-number">{{ user_stats.watchlist_count }}</div>
+            <div class="stat-label">Filme in Watchlist</div>
+        </div>
     </div>
-    <div class="feature-card glass-card">
-        <div class="feature-icon">🤖</div>
-        <h3>KI-Empfehlungen</h3>
-        <p>Personalisierte Filmempfehlungen durch künstliche Intelligenz</p>
+</section>
+{% endif %}
+
+<!-- Featured Movies -->
+<section class="section">
+    <h2 class="section-title gradient-text">Beliebte Filme</h2>
+    <div class="movie-grid">
+        {% for movie in movies[:6] %}
+        <div class="movie-card glass-card">
+            <div class="movie-poster">
+                <img src="{{ movie.poster_url }}" alt="{{ movie.title }}">
+                <div class="movie-overlay">
+                    <div class="movie-actions">
+                        <a href="{{ url_for('movie_quiz', movie_id=movie.id) }}" class="btn-primary btn-small">🎯 Quiz</a>
+                        {% if current_user.is_authenticated %}
+                        <form action="{{ url_for('add_to_watchlist', movie_id=movie.id) }}" method="POST" style="display: inline;">
+                            <button type="submit" class="btn-secondary btn-small">➕ Watchlist</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="movie-info">
+                <h3 class="movie-title">{{ movie.title }}</h3>
+                <div class="movie-meta">
+                    <span>{{ movie.release_year }}</span>
+                    <span>{{ movie.genre }}</span>
+                    <div class="movie-rating">
+                        <span class="star">⭐</span>
+                        <span>{{ "%.1f"|format(movie.rating) if movie.rating is not none else "N/A" }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
     </div>
-    <div class="feature-card glass-card">
-        <div class="feature-icon">⭐</div>
-        <h3>Bewertungen</h3>
-        <p>Teilen Sie Ihre Meinung und sehen Sie Bewertungen anderer</p>
-    </div>
-</div>
+</section>
+
+<style>
+.hero {
+    text-align: center;
+    padding: 4rem 2rem;
+    max-width: 1200px;
+    margin: 2rem auto;
+}
+
+.hero h1 {
+    font-size: 3.5rem;
+    font-weight: 900;
+    margin-bottom: 1rem;
+    animation: textGlow 3s ease-in-out infinite alternate;
+}
+
+.hero p {
+    font-size: 1.25rem;
+    color: var(--text-secondary);
+    margin-bottom: 2rem;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.section {
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.section-title {
+    font-size: 2rem;
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+}
+
+@keyframes textGlow {
+    from { filter: brightness(1); }
+    to { filter: brightness(1.2); }
+}
+
+@media (max-width: 768px) {
+    .hero h1 {
+        font-size: 2.5rem;
+    }
+
+    .stats-grid {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    }
+}
+</style>
 {% endblock %}
