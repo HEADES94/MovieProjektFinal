@@ -1,12 +1,15 @@
 """
 MovieProjekt Flask App
 """
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_wtf.csrf import CSRFProtect
+from flask_wtf import FlaskForm
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func, case
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
+import json
 
 from ai_request import AIRequest
 from datamanager.sqlite_data_manager import SQliteDataManager
@@ -22,8 +25,11 @@ app = Flask(__name__)
 app.config.update(
     ENV='development',
     DEBUG=True,
-    SECRET_KEY='dein-geheimer-schluessel'
+    SECRET_KEY='dein-geheimer-schluessel',
+    WTF_CSRF_ENABLED=True
 )
+
+csrf = CSRFProtect(app)
 
 # Füge den shuffle-Filter zu Jinja2 hinzu
 def jinja2_shuffle(seq):
@@ -343,7 +349,7 @@ def movie_details(movie_id):
                     # Aktualisiere bestehende Bewertung
                     existing_review.rating = rating
                     existing_review.comment = comment
-                    existing_review.updated_at = datetime.utcnow()
+                    existing_review.updated_at = datetime.now(UTC)
                 else:
                     # Erstelle neue Bewertung
                     review = Review(
@@ -351,11 +357,25 @@ def movie_details(movie_id):
                         movie_id=movie_id,
                         rating=rating,
                         comment=comment,
-                        created_at=datetime.utcnow()
+                        created_at=datetime.now(UTC)
                     )
                     session.add(review)
 
                 session.commit()
+
+                # Achievement für 10 Reviews prüfen und ggf. vergeben (mindestens 10 und noch nicht erhalten)
+                from services.achievement_service import AchievementService
+                achievement_service = AchievementService(data_manager)
+                with data_manager.SessionFactory() as session2:
+                    review_count = session2.query(Review).filter_by(user_id=current_user.id).count()
+                    user_ach = session2.query(UserAchievement).join(Achievement).filter(
+                        UserAchievement.user_id == current_user.id,
+                        Achievement.code == 'reviewer_10'
+                    ).first()
+                    if review_count >= 10 and not user_ach:
+                        achievement_service._grant_achievement(current_user.id, 'reviewer_10', session2)
+                    session2.commit()
+
                 flash('Ihre Bewertung wurde erfolgreich gespeichert.', 'success')
             except Exception as e:
                 session.rollback()
@@ -466,168 +486,203 @@ def delete_user_movie(user_id, movie_id):
 
 
 # movie recommendation from AI
-@app.route('/users/<user_id>/recommend_movie', methods=["GET", "POST"])
+@app.route('/users/<user_id>/recommend_movie', methods=['GET', 'POST'])
 def recommendation(user_id):
-    """Filmempfehlungen für einen bestimmten Nutzer."""
     with data_manager.SessionFactory() as session:
-        # Benutze session.get statt query().get()
-        chosen = session.get(User, user_id)
-        if not chosen:
-            return render_template('404.html'), 404
+        user = session.get(User, user_id)
+        if not user:
+            flash('Benutzer nicht gefunden', 'error')
+            return redirect(url_for('home'))
 
         if request.method == "POST":
-            try:
-                # Hole die bewerteten Filme des Nutzers
-                user_movies = session.query(UserMovie).filter_by(user_id=user_id).all()
-                data_string = ""
-                for um in user_movies:
-                    movie = session.get(Movie, um.movie_id)
-                    if movie:
-                        data_string += f"Title: {movie.title}, Rating: {um.rating}, "
+            if not request.form.get('genre_preference'):
+                flash('Bitte wählen Sie ein Genre aus', 'error')
+                return render_template('recommend.html', user=user)
 
-                # Optional: Film ausschließen
-                excluded_movie = request.form.get('name')
+            genre_preference = request.form.get('genre_preference')
+            query = session.query(Movie)
 
-                if excluded_movie:
-                    recommendation = ai_client.ai_excluded_movie_request(data_string, excluded_movie)
-                else:
-                    recommendation = ai_client.ai_request(data_string)
+            if 'Action & Spannung' in genre_preference:
+                query = query.filter(
+                    Movie.genre.ilike('%action%') |
+                    Movie.genre.ilike('%thriller%') |
+                    Movie.genre.ilike('%adventure%') |
+                    Movie.genre.ilike('%sci-fi%')
+                ).order_by(func.random())
+            elif 'Drama & Gefühl' in genre_preference:
+                query = query.filter(
+                    Movie.genre.ilike('%drama%') |
+                    Movie.genre.ilike('%romance%')
+                ).order_by(func.random())
+            elif 'Comedy & Humor' in genre_preference:
+                query = query.filter(
+                    Movie.genre.ilike('%comedy%')
+                ).order_by(func.random())
+            elif 'Horror & Mystery' in genre_preference:
+                query = query.filter(
+                    Movie.genre.ilike('%horror%') |
+                    Movie.genre.ilike('%mystery%') |
+                    Movie.genre.ilike('%thriller%')
+                ).order_by(func.random())
 
-                if recommendation and 'movie' in recommendation:
-                    movie_data = recommendation['movie']
-                    # Prüfe ob der Film bereits in der Datenbank ist
-                    movie = session.query(Movie).filter_by(title=movie_data['title']).first()
+            movies = query.limit(5).all()
 
-                    if not movie:
-                        # Füge den Film zur Datenbank hinzu
-                        movie = Movie(
-                            title=movie_data['title'],
-                            release_year=int(movie_data['year']) if movie_data.get('year') else None,
-                            director=movie_data.get('director'),
-                            genre=movie_data.get('genre'),
-                            description=movie_data.get('plot'),
-                            poster_url=movie_data.get('poster'),
-                            rating=float(movie_data.get('imdb', 0)),
-                            country=movie_data.get('country')
-                        )
-                        session.add(movie)
-                        session.commit()
+            if not movies:
+                flash('Leider wurden keine passenden Filme gefunden.', 'warning')
+                return render_template('recommend.html', user=user)
 
-                    # Stelle sicher, dass wir ein Movie-Objekt zurückgeben
-                    return render_template('movie_recommend.html',
-                                        recommendation=movie,
-                                        reason=recommendation.get('reason', 'Basierend auf deinen Bewertungen'),
-                                        user=chosen)
+            return render_template('recommend.html',
+                                user=user,
+                                recommended_movies=movies)
 
-                # Wenn keine Empfehlung gefunden wurde
-                flash('Leider konnte keine passende Empfehlung generiert werden.', 'warning')
-                return render_template('movie_recommend.html',
-                                    recommendation=None,
-                                    user=chosen)
-
-            except Exception as e:
-                print(f"Fehler bei der Filmempfehlung: {str(e)}")
-                flash('Bei der Generierung der Empfehlung ist ein Fehler aufgetreten.', 'error')
-                return render_template('movie_recommend.html',
-                                    recommendation=None,
-                                    user=chosen)
-
-        # GET-Anfrage
-        return render_template('movie_recommend.html',
-                            recommendation=None,
-                            user=chosen)
+        # GET request
+        return render_template('recommend.html', user=user)
 
 # Quiz Routes
 @app.route('/quiz')
+@login_required
 def quiz_home():
-    """Zeigt die Quiz-Startseite mit verfügbaren Quizzen."""
-    with data_manager.SessionFactory() as session:
-        # Hole die letzten 6 Filme für Quizze
-        recent_movies = session.query(Movie).order_by(Movie.id.desc()).limit(6).all()
+    """Zeigt die Quiz-Startseite mit verfügbaren und gespielten Quizzen."""
+    try:
+        with data_manager.SessionFactory() as session:
+            # Lade alle Filme
+            all_movies = session.query(Movie).all()
 
-        # Wenn Benutzer eingeloggt ist, hole seine Quiz-Statistiken
-        user_stats = None
-        if current_user.is_authenticated:
-            total_attempts = session.query(QuizAttempt).filter_by(user_id=current_user.id).count()
-            if total_attempts > 0:
-                avg_score = session.query(func.avg(QuizAttempt.score)).filter_by(
-                    user_id=current_user.id
+            # Lade die bereits gespielten Quizze des Benutzers
+            played_quizzes = session.query(Movie).join(QuizAttempt).filter(
+                QuizAttempt.user_id == current_user.id
+            ).distinct().all()
+
+            # Filme, die noch nicht gespielt wurden
+            available_movies = [movie for movie in all_movies if movie not in played_quizzes]
+
+            # Statistiken des Benutzers laden
+            user_stats = {}
+            if current_user.is_authenticated:
+                total_attempts = session.query(func.count(QuizAttempt.id)).filter(
+                    QuizAttempt.user_id == current_user.id
+                ).scalar()
+
+                best_score = session.query(func.max(QuizAttempt.score)).filter(
+                    QuizAttempt.user_id == current_user.id
                 ).scalar() or 0
-                best_score = session.query(func.max(QuizAttempt.score)).filter_by(
-                    user_id=current_user.id
+
+                avg_score = session.query(func.avg(QuizAttempt.score)).filter(
+                    QuizAttempt.user_id == current_user.id
                 ).scalar() or 0
-            else:
-                avg_score = 0
-                best_score = 0
 
-            user_stats = {
-                'total_attempts': total_attempts,
-                'avg_score': round(float(avg_score), 1),
-                'best_score': best_score
-            }
+                user_stats = {
+                    'total_attempts': total_attempts,
+                    'best_score': best_score,
+                    'avg_score': avg_score
+                }
 
-        return render_template('quiz_home.html',
-                            movies=recent_movies,
-                            user_stats=user_stats)
+            return render_template('quiz_home.html',
+                                 available_movies=available_movies,
+                                 played_movies=played_quizzes,
+                                 user_stats=user_stats)
+    except Exception as e:
+        app.logger.error(f"Fehler bei der Anzeige der Quiz-Startseite: {str(e)}")
+        flash('Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.', 'error')
+        return redirect(url_for('home'))
 
 @app.route('/quiz/<movie_id>')
+@login_required
 def movie_quiz(movie_id):
     """Startet ein Quiz für einen bestimmten Film."""
-    with data_manager.SessionFactory() as session:
-        movie = session.get(Movie, movie_id)
-        if not movie:
-            flash('Film nicht gefunden.', 'error')
-            return redirect(url_for('quiz_home'))
+    try:
+        with data_manager.SessionFactory() as session:
+            movie = session.get(Movie, movie_id)
+            if not movie:
+                flash('Film nicht gefunden.', 'error')
+                return redirect(url_for('quiz_home'))
 
-        quiz_service = QuizService(data_manager)
-        questions = quiz_service.get_questions_for_movie(movie_id)
+            difficulty = request.args.get('difficulty', None)
 
-        if not questions:
-            flash('Keine Fragen für diesen Film verfügbar.', 'warning')
-            return redirect(url_for('quiz_home'))
+            # Wenn keine Schwierigkeit ausgewählt wurde, zeige die Schwierigkeitsauswahl
+            if not difficulty:
+                return render_template('quiz.html',
+                                   movie=movie,
+                                   questions=None,
+                                   show_difficulty_selection=True)
 
-        return render_template('quiz.html',
-                            movie=movie,
-                            questions=questions)
+            quiz_service = QuizService(data_manager)
+            questions = quiz_service.get_questions_for_movie(movie_id, difficulty=difficulty)
 
-@app.route('/quiz/<movie_id>/submit', methods=['POST'])
+            if not questions:
+                flash('Keine Fragen für diesen Film verfügbar.', 'warning')
+                return redirect(url_for('quiz_home'))
+
+            return render_template('quiz.html',
+                               movie=movie,
+                               questions=questions,
+                               show_difficulty_selection=False,
+                               difficulty=difficulty)
+    except Exception as e:
+        app.logger.error(f"Fehler beim Laden des Quiz: {str(e)}")
+        flash('Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.', 'error')
+        return redirect(url_for('quiz_home'))
+
+@app.route('/quiz/<int:movie_id>/submit', methods=['POST'])
 @login_required
+@csrf.exempt
 def submit_quiz(movie_id):
-    """Verarbeitet die Quiz-Antworten und zeigt das Ergebnis."""
-    answers = request.form
-    difficulty = request.form.get('difficulty', 'mittel')  # Standard: mittel
-    quiz_service = QuizService(data_manager)
-    score = quiz_service.calculate_score(movie_id, answers, difficulty)
+    """Verarbeitet die Quiz-Antworten und speichert das Ergebnis."""
+    try:
+        if not request.is_json:
+            return jsonify({'success': False, 'error': 'Content-Type muss application/json sein'}), 400
 
-    with data_manager.SessionFactory() as session:
-        # Speichere den Quizversuch
-        quiz_attempt = QuizAttempt(
-            user_id=current_user.id,
-            movie_id=movie_id,
-            score=score,
-            difficulty=difficulty,
-            created_at=datetime.utcnow()
-        )
-        session.add(quiz_attempt)
-        session.commit()
+        data = request.get_json()
 
-        # Prüfe auf Achievements
-        achievement_service = AchievementService(session)
-        new_achievements = achievement_service.check_quiz_achievements(current_user.id, score, difficulty)
+        if not data or not isinstance(data, dict):
+            return jsonify({'success': False, 'error': 'Ungültige Daten'}), 400
 
-        achievements_data = []
-        if new_achievements:
-            for achievement in new_achievements:
-                achievements_data.append({
-                    'title': achievement.title,
-                    'description': achievement.description
-                })
-                flash(f'Neues Achievement freigeschaltet: {achievement.title}!', 'success')
+        if 'answers' not in data or 'difficulty' not in data:
+            return jsonify({'success': False, 'error': 'Antworten oder Schwierigkeitsgrad fehlen'}), 400
 
-    return jsonify({
-        'score': score,
-        'achievements': achievements_data
-    })
+        with data_manager.SessionFactory() as session:
+            # Berechne die Punktzahl und hole die detaillierten Ergebnisse
+            quiz_service = QuizService(data_manager)
+            result = quiz_service.calculate_score(
+                movie_id=movie_id,
+                answers=data['answers'],
+                difficulty=data['difficulty']
+            )
+
+            # Speichere den Quiz-Versuch
+            quiz_attempt = QuizAttempt(
+                user_id=current_user.id,
+                movie_id=movie_id,
+                score=result['score'],
+                created_at=datetime.now(UTC),
+                difficulty=data['difficulty']
+            )
+            session.add(quiz_attempt)
+            session.commit()
+
+            # Achievement Service initialisieren und Achievements prüfen
+            achievement_service = AchievementService(data_manager)
+            new_achievements = achievement_service.check_quiz_achievements(current_user.id, result['score'], data['difficulty'])
+            achievements_list = new_achievements  # Direkt übernehmen, da schon Dicts
+
+            # Stelle sicher, dass alle Änderungen gespeichert sind
+            session.commit()
+
+            # Gib die vollständigen Ergebnisse zurück
+            return jsonify({
+                'success': True,
+                'score': result['score'],
+                'correct_count': result['correct_count'],
+                'total_questions': result['total_questions'],
+                'question_results': result.get('question_results', []),
+                'answered_questions': result.get('answered_questions', []),
+                'achievements': achievements_list,
+                'difficulty': data['difficulty']
+            })
+
+    except Exception as e:
+        app.logger.error(f"Fehler beim Quiz-Submit: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/quiz/suggest', methods=['GET', 'POST'])
 @login_required
@@ -949,6 +1004,70 @@ def get_movie_recommendation(movie_id):
         # Hier könnte man gespeicherte KI-Empfehlungen abrufen
         # Für jetzt geben wir einfach einen leeren Response zurück
         return jsonify({'recommendation': None})
+
+@app.route('/static/<path:filename>')
+def serve_static(filename):
+    if filename == 'default_poster.jpg':
+        response = send_from_directory('static', filename)
+        # Setze Cache-Control Header für das Default-Poster (1 Stunde)
+        response.headers['Cache-Control'] = 'public, max-age=3600'
+        return response
+    return send_from_directory('static', filename)
+
+class MovieRecommendForm(FlaskForm):
+    pass
+
+@app.route('/recommend', methods=['GET', 'POST'])
+def recommend_movies():
+    form = MovieRecommendForm()  # Erstelle ein echtes FlaskForm-Objekt
+    if request.method == 'POST' and form.validate():
+        genre_preference = request.form.get('genre', '')
+
+        with data_manager.SessionFactory() as session:
+            query = session.query(Movie)
+
+            if 'Action & Spannung' in genre_preference:
+                query = query.filter(
+                    Movie.genre.ilike('%action%') |
+                    Movie.genre.ilike('%thriller%') |
+                    Movie.genre.ilike('%adventure%') |
+                    Movie.genre.ilike('%sci-fi%')
+                )
+            elif 'Drama & Gefühl' in genre_preference:
+                query = query.filter(
+                    Movie.genre.ilike('%drama%') |
+                    Movie.genre.ilike('%romance%')
+                )
+            elif 'Comedy & Humor' in genre_preference:
+                query = query.filter(
+                    Movie.genre.ilike('%comedy%') |
+                    Movie.genre.ilike('%romance comedy%')
+                )
+            elif 'Horror & Mystery' in genre_preference:
+                query = query.filter(
+                    Movie.genre.ilike('%horror%') |
+                    Movie.genre.ilike('%mystery%') |
+                    Movie.genre.ilike('%thriller%')
+                )
+
+            movies = query.order_by(
+                Movie.rating.desc(),
+                Movie.release_year.desc()
+            ).limit(5).all()
+
+            if not movies:
+                flash('Leider wurden keine passenden Filme gefunden.', 'warning')
+                return render_template('movie_recommend.html', form=form)
+
+            recommendation = random.choice(movies)
+            reason = f"Dieser Film wurde basierend auf Ihrer Vorliebe für {genre_preference} ausgewählt."
+
+            return render_template('movie_recommend.html',
+                                 recommendation=recommendation,
+                                 reason=reason,
+                                 form=form)
+
+    return render_template('movie_recommend.html', form=form)
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5002, debug=True)

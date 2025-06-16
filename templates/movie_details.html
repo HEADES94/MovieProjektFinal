@@ -6,7 +6,10 @@
 <div class="movie-details-container">
     <div class="movie-hero glass-card">
         <div class="movie-hero-content">
-            <img src="{{ movie.poster_url }}" alt="{{ movie.title }}" class="movie-poster">
+            <img src="{{ movie.poster_url or url_for('static', filename='default_poster.jpg') }}"
+                 alt="{{ movie.title }}"
+                 class="movie-poster"
+                 loading="eager">
             <div class="movie-info">
                 <h1 class="gradient-text">{{ movie.title }}</h1>
                 <div class="movie-meta">
@@ -27,6 +30,7 @@
                     </a>
                     {% if current_user.is_authenticated %}
                     <form action="{{ url_for('add_to_watchlist', movie_id=movie.id) }}" method="POST" style="display: inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn-secondary watchlist-btn">
                             {% if movie.in_watchlist %}
                             ✓ In Watchlist
@@ -111,6 +115,7 @@
         <div class="card-body">
             {% if current_user.is_authenticated %}
                 <form id="reviewForm" action="{{ url_for('movie_details', movie_id=movie.id) }}" method="POST" class="mb-4">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="form-group">
                         <label for="rating">Bewertung (1-5 Sterne)</label>
                         <select class="form-control" id="rating" name="rating" required>
@@ -159,63 +164,41 @@
     <!-- Ähnliche Filme und KI-Empfehlungen Sektion -->
     <div class="recommendations-container">
         <!-- Ähnliche Filme -->
-        <div class="similar-movies-section glass-card" data-movie-id="{{ movie.id }}">
-            <h2 class="gradient-text">Ähnliche Filme</h2>
-            <div id="similarMoviesContainer" class="similar-movies-grid">
-                {% if similar_movies %}
-                <div class="movie-recommendations">
-                    {% for rec in similar_movies %}
-                    <div class="recommendation-card">
-                        <img src="{{ rec.poster_url }}" alt="{{ rec.title }}" class="rec-poster">
-                        <div class="rec-info">
-                            <h3>{{ rec.title }}</h3>
-                            <div class="rec-meta">
-                                <span>{{ rec.release_year }}</span>
-                                <span>{{ rec.genre }}</span>
-                            </div>
-                            <a href="{{ url_for('movie_details', movie_id=rec.id) }}" class="btn-secondary">Details</a>
-                        </div>
+        <div class="similar-movies-section glass-card">
+            <h2 class="section-title">Ähnliche Filme</h2>
+            <div class="similar-movies-grid">
+                {% for similar in similar_movies %}
+                <div class="movie-card">
+                    <img data-src="{{ similar.poster_url or url_for('static', filename='default_poster.jpg') }}"
+                         alt="{{ similar.title }}"
+                         class="lazy-load movie-poster"
+                         loading="lazy">
+                    <div class="movie-info">
+                        <h3>{{ similar.title }}</h3>
+                        <p>{{ similar.release_year }}</p>
                     </div>
-                    {% endfor %}
                 </div>
-                {% else %}
-                <p>Keine ähnlichen Filme verfügbar.</p>
-                {% endif %}
+                {% endfor %}
             </div>
         </div>
 
         <!-- KI-Empfehlungen -->
         <div class="ai-recommendations-section glass-card">
-            <h2 class="gradient-text">KI-Empfehlungen</h2>
-            <div id="aiRecommendationArea">
-                <div id="generateArea" class="generate-recommendation-container">
-                    <button id="generateAiRecommendation" class="btn-primary">
-                        <span class="btn-icon">🤖</span> KI-Empfehlung generieren
-                    </button>
-                    <div id="loadingSpinner" class="loading-spinner" style="display: none;">
-                        Generiere Empfehlung...
+            <h2 class="section-title">KI-Empfehlungen</h2>
+            <div class="recommendations-grid">
+                {% for rec in ai_recommendations %}
+                <div class="recommendation-card">
+                    <img data-src="{{ rec.movie.poster_url or url_for('static', filename='default_poster.jpg') }}"
+                         alt="{{ rec.movie.title }}"
+                         class="lazy-load movie-poster"
+                         loading="lazy">
+                    <div class="recommendation-info">
+                        <h3>{{ rec.movie.title }}</h3>
+                        <p>{{ rec.movie.release_year }}</p>
+                        <p class="recommendation-reason">{{ rec.reason }}</p>
                     </div>
                 </div>
-                <div id="recommendationResult" class="ai-recommendation-result" style="display: none;">
-                    <div class="recommendation-card">
-                        <div class="movie-poster">
-                            <img id="aiMoviePoster" src="" alt="Film Poster" onerror="this.src='/static/default_poster.jpg'">
-                        </div>
-                        <div class="ai-rec-info">
-                            <h3 id="aiMovieTitle"></h3>
-                            <div class="rec-meta">
-                                <span id="aiMovieDirector"></span>
-                                <span id="aiMovieGenre"></span>
-                                <span id="aiMovieYear"></span>
-                            </div>
-                            <p id="aiMoviePlot" class="movie-plot"></p>
-                            <p id="aiExplanation" class="ai-explanation"></p>
-                        </div>
-                    </div>
-                    <button id="generateNewRecommendation" class="btn-secondary mt-3">
-                        <span class="btn-icon">🔄</span> Neue Empfehlung generieren
-                    </button>
-                </div>
+                {% endfor %}
             </div>
         </div>
     </div>
@@ -509,4 +492,5 @@ document.addEventListener('DOMContentLoaded', function() {
     generateNewButton?.addEventListener('click', generateRecommendation);
 });
 </script>
+<script src="{{ url_for('static', filename='recommendations.js') }}"></script>
 {% endblock %}

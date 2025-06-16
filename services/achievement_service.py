@@ -1,5 +1,5 @@
 """
-achievement_service.py - Service für das Achievement-System
+achievement_service.py - Service für die Achievement-Vergabe
 """
 from datetime import datetime
 from typing import List, Optional
@@ -9,144 +9,146 @@ from data_models import Achievement, UserAchievement, User, QuizAttempt, Review,
 class AchievementService:
     """Service zur Verwaltung von Achievements und deren Vergabe."""
 
-    def __init__(self, session: Session):
-        self.session = session
+    def __init__(self, data_manager):
+        self.data_manager = data_manager
+        with self.data_manager.SessionFactory() as session:
+            self._init_achievements(session)
 
-    def check_achievements(self, user_id: int) -> List[Achievement]:
-        """
-        Überprüft alle möglichen Achievements für einen Benutzer und vergibt neue.
-        """
-        user = self.session.query(User).get(user_id)
-        if not user:
-            return []
+    def _init_achievements(self, session):
+        """Initialisiert Quiz-, Watchlist- und Kommentar-bezogene Achievements."""
+        default_achievements = [
+            # Quiz-bezogene Achievements
+            {
+                'code': 'quiz_beginner',
+                'title': '🎉 Quiz-Neuling',
+                'description': 'Beende dein erstes Quiz!'
+            },
+            {
+                'code': 'perfect_quiz',
+                'title': '🎯 Perfect Quiz',
+                'description': 'Erreiche die perfekte Punktzahl in einem Quiz!'
+            },
+            {
+                'code': 'quiz_expert',
+                'title': '🎓 Quiz Profi',
+                'description': 'Schließe ein schweres Quiz mit mindestens 1000 Punkten ab!'
+            },
+            {
+                'code': 'quiz_master',
+                'title': '👑 Quiz Master',
+                'description': 'Erreiche in 5 verschiedenen Quizzen mindestens 400 Punkte!'
+            },
+            {
+                'code': 'streak_5',
+                'title': '🔥 5er Streak',
+                'description': 'Beantworte 5 Fragen in Folge richtig!'
+            },
+            {
+                'code': 'streak_10',
+                'title': '🔥 10er Streak',
+                'description': 'Beantworte 10 Fragen in Folge richtig!'
+            },
+            {
+                'code': 'quiz_100',
+                'title': '💯 Quiz-Veteran',
+                'description': 'Beende 100 Quizze!'
+            },
+            {
+                'code': 'all_correct_3',
+                'title': '🌟 Perfektionist',
+                'description': 'Erreiche 3 perfekte Quizze in Folge!'
+            },
+            # Watchlist-Achievements
+            {
+                'code': 'watchlist_add_10',
+                'title': '📺 Watchlist-Fan',
+                'description': 'Füge 10 Filme zur Watchlist hinzu!'
+            },
+            # Kommentar-Achievements
+            {
+                'code': 'reviewer_10',
+                'title': '📝 Kritiker',
+                'description': 'Schreibe 10 Kommentare!'
+            },
+            {
+                'code': 'comment_like_10',
+                'title': '👍 Beliebter Kommentator',
+                'description': 'Erhalte 10 Likes auf deine Kommentare!'
+            },
+        ]
 
-        earned_achievements = []
+        for achievement in default_achievements:
+            existing = session.query(Achievement).filter_by(code=achievement['code']).first()
+            if not existing:
+                new_achievement = Achievement(
+                    code=achievement['code'],
+                    title=achievement['title'],
+                    description=achievement['description']
+                )
+                session.add(new_achievement)
+        try:
+            session.commit()
+        except:
+            session.rollback()
 
-        # Überprüfe Quiz-basierte Achievements
-        quiz_attempts = self.session.query(QuizAttempt).filter_by(user_id=user_id).all()
+    def check_quiz_achievements(self, user_id: int, score: int, difficulty: str) -> List[dict]:
+        """Überprüft und vergibt Quiz-bezogene Achievements und gibt sie als Dicts zurück."""
+        with self.data_manager.SessionFactory() as session:
+            earned_achievements = []
 
-        # Perfect Quiz Achievement (100% bei einem Quiz)
-        perfect_quiz = any(
-            attempt.score == attempt.max_possible_score
-            for attempt in quiz_attempts
-        )
-        if perfect_quiz and self._check_achievement_eligibility(user_id, "perfect_quiz"):
-            earned_achievements.append(self._grant_achievement(user_id, "perfect_quiz"))
+            # Quiz-Neuling Achievement
+            quiz_attempts = session.query(QuizAttempt).filter_by(user_id=user_id).count()
+            if quiz_attempts == 1:  # Erstes Quiz
+                achievement = self._grant_achievement(user_id, 'quiz_beginner', session)
+                if achievement:
+                    earned_achievements.append({'title': achievement.title, 'description': achievement.description})
 
-        # First Highscore Achievement
-        has_highscore = any(attempt.is_highscore for attempt in quiz_attempts)
-        if has_highscore and self._check_achievement_eligibility(user_id, "first_highscore"):
-            earned_achievements.append(self._grant_achievement(user_id, "first_highscore"))
+            # Perfect Quiz Achievement (alle Fragen richtig)
+            quiz_attempt = session.query(QuizAttempt).filter_by(
+                user_id=user_id
+            ).order_by(QuizAttempt.created_at.desc()).first()
 
-        # Quiz Master Achievement (5 verschiedene Quizze mit mind. 400 Punkten)
-        high_scoring_quizzes = set(
-            attempt.quiz_id
-            for attempt in quiz_attempts
-            if attempt.score >= 400
-        )
-        if len(high_scoring_quizzes) >= 5 and self._check_achievement_eligibility(user_id, "quiz_master"):
-            earned_achievements.append(self._grant_achievement(user_id, "quiz_master"))
+            if quiz_attempt and hasattr(quiz_attempt, 'max_possible_score') and quiz_attempt.score == quiz_attempt.max_possible_score:
+                achievement = self._grant_achievement(user_id, 'perfect_quiz', session)
+                if achievement:
+                    earned_achievements.append({'title': achievement.title, 'description': achievement.description})
 
-        # Überprüfe Review-basierte Achievements
-        review_count = self.session.query(Review).filter_by(user_id=user_id).count()
-        if review_count >= 1 and self._check_achievement_eligibility(user_id, "first_review"):
-            earned_achievements.append(self._grant_achievement(user_id, "first_review"))
-        if review_count >= 10 and self._check_achievement_eligibility(user_id, "review_master"):
-            earned_achievements.append(self._grant_achievement(user_id, "review_master"))
+            # Quiz Expert Achievement (1000+ Punkte in schwerem Quiz)
+            if difficulty == 'schwer' and score >= 1000:
+                achievement = self._grant_achievement(user_id, 'quiz_expert', session)
+                if achievement:
+                    earned_achievements.append({'title': achievement.title, 'description': achievement.description})
 
-        # Überprüfe Watchlist-basierte Achievements
-        watchlist_count = self.session.query(WatchlistItem).filter_by(user_id=user_id).count()
-        if watchlist_count >= 5 and self._check_achievement_eligibility(user_id, "watchlist_collector"):
-            earned_achievements.append(self._grant_achievement(user_id, "watchlist_collector"))
+            # Alle Achievements als Dicts zurückgeben (falls versehentlich noch SQLAlchemy-Objekte enthalten sind)
+            result = []
+            for ach in earned_achievements:
+                if isinstance(ach, dict):
+                    result.append(ach)
+                else:
+                    # Fallback, falls doch ein Objekt durchrutscht
+                    result.append({'title': getattr(ach, 'title', ''), 'description': getattr(ach, 'description', '')})
+            return result
 
-        return [achievement for achievement in earned_achievements if achievement]
-
-    def _check_achievement_eligibility(self, user_id: int, achievement_id: str) -> bool:
-        """Prüft, ob ein Benutzer für ein Achievement berechtigt ist."""
-        achievement = self.session.query(Achievement).filter_by(id=achievement_id).first()
+    def _grant_achievement(self, user_id: int, achievement_code: str, session) -> Optional[Achievement]:
+        """Vergibt ein Achievement an einen Benutzer."""
+        # Prüfe, ob der Benutzer das Achievement bereits hat
+        achievement = session.query(Achievement).filter_by(code=achievement_code).first()
         if not achievement:
-            return False
+            return None
 
-        existing = self.session.query(UserAchievement).filter_by(
+        existing = session.query(UserAchievement).filter_by(
             user_id=user_id,
             achievement_id=achievement.id
         ).first()
 
-        return not existing
-
-    def _grant_achievement(self, user_id: int, achievement_id: str) -> Optional[Achievement]:
-        """Vergibt ein Achievement an einen Benutzer."""
-        achievement = self.session.query(Achievement).filter_by(id=achievement_id).first()
-        if not achievement:
+        if existing:
             return None
 
+        # Erstelle einen neuen UserAchievement-Eintrag
         user_achievement = UserAchievement(
             user_id=user_id,
             achievement_id=achievement.id,
-            earned_at=datetime.utcnow()
+            earned_at=datetime.now()
         )
-
-        self.session.add(user_achievement)
-        self.session.commit()
-
+        session.add(user_achievement)
         return achievement
-
-    def get_available_achievements(self) -> List[Achievement]:
-        """Gibt alle verfügbaren Achievements zurück."""
-        return self.session.query(Achievement).all()
-
-    def get_user_achievements(self, user_id: int) -> List[Achievement]:
-        """Gibt alle Achievements eines Benutzers zurück."""
-        user = self.session.query(User).get(user_id)
-        if not user:
-            return []
-        return user.achievements
-
-def init_achievements(session: Session) -> None:
-    """Initialisiert die Standard-Achievements in der Datenbank."""
-    achievements = [
-        {
-            "id": "perfect_quiz",
-            "title": "Perfect Quiz",
-            "description": "Erreiche die perfekte Punktzahl in einem Quiz!",
-            "icon_url": "/static/achievements/perfect_quiz.png"
-        },
-        {
-            "id": "first_highscore",
-            "title": "Erster Highscore",
-            "description": "Erreiche deinen ersten Highscore!",
-            "icon_url": "/static/achievements/first_highscore.png"
-        },
-        {
-            "id": "quiz_master",
-            "title": "Quiz Master",
-            "description": "Erreiche in 5 verschiedenen Quizzen mindestens 400 Punkte!",
-            "icon_url": "/static/achievements/quiz_master.png"
-        },
-        {
-            "id": "first_review",
-            "title": "Erster Eindruck",
-            "description": "Schreibe deine erste Filmbewertung",
-            "icon_url": "/static/achievements/first_review.png"
-        },
-        {
-            "id": "review_master",
-            "title": "Kritiker-Profi",
-            "description": "Bewerte 10 verschiedene Filme",
-            "icon_url": "/static/achievements/review_master.png"
-        },
-        {
-            "id": "watchlist_collector",
-            "title": "Film-Sammler",
-            "description": "Füge 5 Filme zu deiner Watchlist hinzu",
-            "icon_url": "/static/achievements/watchlist_collector.png"
-        }
-    ]
-
-    for achievement_data in achievements:
-        existing = session.query(Achievement).filter_by(id=achievement_data["id"]).first()
-        if not existing:
-            achievement = Achievement(**achievement_data)
-            session.add(achievement)
-
-    session.commit()

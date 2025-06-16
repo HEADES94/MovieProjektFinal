@@ -148,6 +148,7 @@ class QuizQuestion(Base):
 
     movie = relationship("Movie", back_populates="quiz_questions")
     ai_metadata = relationship("AIQuestionMetadata", back_populates="question", uselist=False)
+    attempt_questions = relationship("QuizAttemptQuestion", back_populates="question")
 
 class AIQuestionMetadata(Base):
     __tablename__ = 'ai_question_metadata'
@@ -173,6 +174,20 @@ class QuizAttempt(Base):
 
     user = relationship("User", back_populates="quiz_attempts")
     movie = relationship("Movie")
+    attempt_questions = relationship("QuizAttemptQuestion", back_populates="attempt")
+
+class QuizAttemptQuestion(Base):
+    """Verknüpfungstabelle zwischen QuizAttempt und QuizQuestion"""
+    __tablename__ = 'quiz_attempt_questions'
+    id = Column(Integer, primary_key=True)
+    attempt_id = Column(Integer, ForeignKey('quiz_attempts.id'))
+    question_id = Column(Integer, ForeignKey('quiz_questions.id'))
+    user_answer = Column(Text)
+    is_correct = Column(Boolean)
+    answered_at = Column(DateTime, default=datetime.utcnow)
+
+    attempt = relationship("QuizAttempt", back_populates="attempt_questions")
+    question = relationship("QuizQuestion", back_populates="attempt_questions")
 
 class Highscore(Base):
     __tablename__ = 'highscores'

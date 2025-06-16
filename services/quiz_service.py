@@ -5,9 +5,11 @@ from typing import List, Dict, Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
+from flask_login import current_user
 from data_models import (QuizQuestion, QuizAttempt, Highscore, Movie, User,
-                        Achievement, UserAchievement)
+                        Achievement, UserAchievement, QuizAttemptQuestion)
 from ai_request import AIRequest
+import random
 
 class QuizService:
     def __init__(self, data_manager):
@@ -18,248 +20,220 @@ class QuizService:
             self._init_achievements(session)
 
     def _init_achievements(self, session):
-        """Initialisiert die Standard-Achievements."""
+        """Initialisiert die Standard-Achievements (zentralisiert und vereinheitlicht)."""
         default_achievements = [
             {
+                'code': 'quiz_beginner',
+                'title': '🎉 Quiz-Neuling',
+                'description': 'Beende dein erstes Quiz!'
+            },
+            {
+                'code': 'perfect_quiz',
                 'title': '🎯 Perfect Quiz',
-                'description': 'Erreiche die perfekte Punktzahl in einem Quiz!',
-                'code': 'perfect_quiz'
+                'description': 'Erreiche die perfekte Punktzahl in einem Quiz!'
             },
             {
-                'title': '🏆 First Highscore',
-                'description': 'Erreiche deinen ersten Highscore!',
-                'code': 'first_highscore'
-            },
-            {
-                'title': '👑 Quiz Master',
-                'description': 'Erreiche in 5 verschiedenen Quizzen mindestens 400 Punkte!',
-                'code': 'quiz_master'
-            },
-            {
+                'code': 'quiz_expert',
                 'title': '🎓 Quiz Profi',
-                'description': 'Schließe ein schweres Quiz mit mindestens 1000 Punkten ab!',
-                'code': 'quiz_expert'
+                'description': 'Schließe ein schweres Quiz mit mindestens 1000 Punkten ab!'
             },
             {
+                'code': 'first_highscore',
+                'title': '🏆 First Highscore',
+                'description': 'Erreiche deinen ersten Highscore!'
+            },
+            {
+                'code': 'quiz_master',
+                'title': '👑 Quiz Master',
+                'description': 'Erreiche in 5 verschiedenen Quizzen mindestens 400 Punkte!'
+            },
+            {
+                'code': 'knowledge_seeker',
                 'title': '📚 Wissensdurst',
-                'description': 'Beantworte 100 Fragen korrekt!',
-                'code': 'knowledge_seeker'
+                'description': 'Beantworte 100 Fragen korrekt!'
             },
             {
+                'code': 'movie_enthusiast',
                 'title': '🎬 Film Enthusiast',
-                'description': 'Schließe Quizze zu 10 verschiedenen Filmen ab!',
-                'code': 'movie_enthusiast'
+                'description': 'Schließe Quizze zu 10 verschiedenen Filmen ab!'
             },
             {
+                'code': 'perfectionist',
                 'title': '🌟 Perfektionist',
-                'description': 'Erreiche 3 perfekte Quizze in Folge!',
-                'code': 'perfectionist'
+                'description': 'Erreiche 3 perfekte Quizze in Folge!'
             },
             {
+                'code': 'streak_master',
                 'title': '🔥 Streak Master',
-                'description': 'Beantworte 20 Fragen in Folge richtig!',
-                'code': 'streak_master'
+                'description': 'Beantworte 20 Fragen in Folge richtig!'
             }
         ]
 
         for achievement in default_achievements:
-            existing = session.query(Achievement).filter_by(code=achievement['code']).first()
-            if not existing:
-                new_achievement = Achievement(**achievement)
+            if not session.query(Achievement).filter_by(code=achievement['code']).first():
+                new_achievement = Achievement(
+                    code=achievement['code'],
+                    title=achievement['title'],
+                    description=achievement['description']
+                )
                 session.add(new_achievement)
+        session.commit()
 
-        try:
-            session.commit()
-        except:
-            session.rollback()
-
-    def get_questions_for_movie(self, movie_id: int) -> List[Dict]:
-        """Generiert Quiz-Fragen für einen bestimmten Film."""
-        try:
-            with self.data_manager.SessionFactory() as session:
-                movie = session.get(Movie, movie_id)
+    def get_questions_for_movie(self, movie_id: int, difficulty: str = 'mittel') -> List[Dict]:
+        """Holt oder generiert neue Quizfragen für einen bestimmten Film."""
+        with self.data_manager.SessionFactory() as session:
+            try:
+                movie = session.query(Movie).get(movie_id)
                 if not movie:
                     return []
 
-                # Erstelle den Filmkontext für die KI
-                movie_context = (
-                    f"Title: {movie.title}\n"
-                    f"Director: {movie.director}\n"
-                    f"Year: {movie.release_year}\n"
-                    f"Genre: {movie.genre}\n"
-                    f"Plot: {movie.description}"
-                )
+                # Hole die letzten Quiz-Versuche des Benutzers für diesen Film
+                recent_questions = set()
+                if current_user.is_authenticated:
+                    # Hole die IDs der kürzlich beantworteten Fragen
+                    recent_attempts = session.query(QuizAttempt).filter_by(
+                        user_id=current_user.id,
+                        movie_id=movie_id
+                    ).order_by(QuizAttempt.created_at.desc()).limit(5).all()
 
-                # Generiere 5 verschiedene Fragen
-                questions = []
-                for _ in range(5):
-                    try:
-                        # Hole eine neue Frage von der KI
-                        question_data = self.ai_client.generate_quiz_question(movie_context)
-                        print(f"Generated question data: {question_data}")  # Debug-Ausgabe
+                    for attempt in recent_attempts:
+                        attempt_questions = session.query(QuizAttemptQuestion).filter_by(
+                            attempt_id=attempt.id
+                        ).all()
+                        recent_questions.update(q.question_id for q in attempt_questions)
 
-                        # Prüfe, ob die Frage vollständig ist
-                        if question_data and all(key in question_data for key in ['question', 'correct_answer', 'wrong_answers']):
-                            if len(question_data['wrong_answers']) >= 3:
-                                questions.append({
-                                    'question': question_data['question'],
-                                    'correct_answer': question_data['correct_answer'],
-                                    'wrong_answers': question_data['wrong_answers'][:3]
-                                })
+                # Generiere in jedem Fall neue Fragen
+                new_questions = self._generate_questions(movie, difficulty)
 
-                    except Exception as e:
-                        print(f"Fehler bei der Fragengenerierung: {str(e)}")
-                        continue
+                # Speichere die neuen Fragen in der Datenbank
+                for q in new_questions:
+                    session.add(q)
+                session.commit()
 
-                # Wenn keine KI-Fragen generiert werden konnten, erstelle Standard-Fragen
-                if not questions:
-                    questions = self._create_default_questions(movie)
+                # Konvertiere die Fragen in Dictionaries
+                questions_data = []
+                for i, q in enumerate(new_questions[:5], 1):  # Nimm maximal 5 Fragen
+                    questions_data.append({
+                        'id': q.id,
+                        'question_text': q.question_text,
+                        'correct_answer': q.correct_answer,
+                        'wrong_answer_1': q.wrong_answer_1,
+                        'wrong_answer_2': q.wrong_answer_2,
+                        'wrong_answer_3': q.wrong_answer_3
+                    })
 
-                print(f"Final questions: {questions}")  # Debug-Ausgabe
-                return questions[:5]
+                return questions_data
 
-        except Exception as e:
-            print(f"Fehler beim Abrufen der Filmfragen: {str(e)}")
-            return []
+            except Exception as e:
+                session.rollback()
+                print(f"Fehler beim Laden/Generieren der Quiz-Fragen: {str(e)}")
+                return []
 
-    def _create_default_questions(self, movie) -> List[Dict]:
-        """Erstellt Standard-Quizfragen, wenn die KI-Generierung fehlschlägt."""
-        questions = []
-
-        # Frage nach dem Erscheinungsjahr
-        if movie.release_year:
-            questions.append({
-                'question': f"In welchem Jahr wurde '{movie.title}' veröffentlicht?",
-                'correct_answer': str(movie.release_year),
-                'wrong_answers': [
-                    str(movie.release_year - 1),
-                    str(movie.release_year - 2),
-                    str(movie.release_year + 1)
-                ]
-            })
-
-        # Frage nach dem Regisseur
-        if movie.director:
-            questions.append({
-                'question': f"Wer führte Regie bei '{movie.title}'?",
-                'correct_answer': movie.director,
-                'wrong_answers': [
-                    "Steven Spielberg",
-                    "Christopher Nolan",
-                    "Martin Scorsese"
-                ]
-            })
-
-        # Frage nach dem Genre
-        if movie.genre:
-            questions.append({
-                'question': f"Welchem Genre gehört '{movie.title}' hauptsächlich an?",
-                'correct_answer': movie.genre.split(',')[0].strip(),
-                'wrong_answers': [
-                    "Action",
-                    "Drama",
-                    "Comedy"
-                ]
-            })
-
-        return questions
-
-    def calculate_score(self, movie_id: int, answers: dict, difficulty: str = 'mittel') -> int:
-        """Berechnet die Punktzahl basierend auf den Antworten und der Schwierigkeit."""
-        with self.data_manager.SessionFactory() as session:
-            # Hole die korrekten Antworten aus dem Formular
-            correct_answers = {k: v for k, v in answers.items() if k.startswith('correct')}
-            user_answers = {k: v for k, v in answers.items() if k.startswith('answer')}
-
-            # Zähle die korrekten Antworten
-            correct_count = sum(
-                1 for i, answer in user_answers.items()
-                if answer == correct_answers.get(f'correct{i[-1]}')
-            )
-
-            # Schwierigkeitsmultiplikator
-            difficulty_multipliers = {
-                'leicht': 1.0,
-                'mittel': 1.5,
-                'schwer': 2.0
+    def _generate_questions(self, movie: Movie, difficulty: str) -> List[QuizQuestion]:
+        """Generiert neue Quizfragen für einen Film."""
+        try:
+            # Erstelle einen Kontext für die KI
+            movie_context = {
+                'title': movie.title,
+                'plot': movie.description,
+                'genre': movie.genre,
+                'director': movie.director,
+                'year': movie.release_year
             }
 
-            multiplier = difficulty_multipliers.get(difficulty, 1.0)
+            # Frage die KI nach Quizfragen
+            questions_data = self.ai_client.generate_quiz_questions(movie_context, difficulty)
 
-            # Berechne die Gesamtpunktzahl
-            # Basis: 200 Punkte pro korrekte Antwort
-            base_score = correct_count * 200
-            final_score = int(base_score * multiplier)
-
-            return final_score
-
-    def _award_achievement(self, session, achievement_code: str, user_id: int):
-        """Verleiht ein Achievement an einen Benutzer."""
-        try:
-            achievement = session.query(Achievement).filter_by(code=achievement_code).first()
-            if achievement:
-                existing = session.query(UserAchievement).filter_by(
-                    user_id=user_id,
-                    achievement_id=achievement.id
-                ).first()
-
-                if not existing:
-                    user_achievement = UserAchievement(
-                        user_id=user_id,
-                        achievement_id=achievement.id,
-                        earned_at=datetime.utcnow()
+            quiz_questions = []
+            if questions_data:
+                for q_data in questions_data:
+                    question = QuizQuestion(
+                        movie_id=movie.id,
+                        question_text=q_data['question'],
+                        correct_answer=q_data['correct_answer'],
+                        wrong_answer_1=q_data['wrong_answers'][0],
+                        wrong_answer_2=q_data['wrong_answers'][1],
+                        wrong_answer_3=q_data['wrong_answers'][2],
+                        difficulty=difficulty
                     )
-                    session.add(user_achievement)
-                    session.commit()
-                    return True
+                    quiz_questions.append(question)
+            return quiz_questions
         except Exception as e:
-            print(f"Fehler beim Vergeben des Achievements: {str(e)}")
-            session.rollback()
-        return False
+            print(f"Fehler beim Generieren der Fragen: {str(e)}")
+            return []
 
-    def _check_quiz_master_achievement(self, session, user_id: int):
-        """Überprüft, ob der Quiz-Master Achievement vergeben werden soll."""
+    def save_quiz_attempt(self, movie_id: int, user_id: int, score: int, difficulty: str) -> Optional[QuizAttempt]:
+        """Speichert einen Quiz-Versuch in der Datenbank."""
         try:
-            high_score_count = session.query(func.count(QuizAttempt.id)).filter(
-                QuizAttempt.user_id == user_id,
-                QuizAttempt.score >= 400
-            ).scalar()
-
-            if high_score_count >= 5:
-                self._award_achievement(session, 'quiz_master', user_id)
+            with self.data_manager.SessionFactory() as session:
+                # Erstelle einen neuen Quiz-Versuch
+                quiz_attempt = QuizAttempt(
+                    user_id=user_id,
+                    movie_id=movie_id,
+                    score=score,
+                    difficulty=difficulty,
+                    created_at=datetime.now()
+                )
+                session.add(quiz_attempt)
+                session.commit()
+                return quiz_attempt
         except Exception as e:
-            print(f"Fehler beim Überprüfen des Quiz-Master Achievements: {str(e)}")
+            print(f"Fehler beim Speichern des Quiz-Versuchs: {str(e)}")
+            return None
 
-    def _check_knowledge_seeker_achievement(self, session, user_id: int, correct_answers: int):
-        """Überprüft, ob das Wissensdurst Achievement vergeben werden soll."""
-        try:
-            total_correct = session.query(func.sum(QuizAttempt.correct_answers)).filter_by(
-                user_id=user_id
-            ).scalar() or 0
-
-            if total_correct + correct_answers >= 100:
-                self._award_achievement(session, 'knowledge_seeker', user_id)
-        except Exception as e:
-            print(f"Fehler beim Überprüfen des Wissensdurst Achievements: {str(e)}")
-
-    def get_user_achievements(self, user_id: int) -> List[Dict]:
-        """Holt alle Achievements eines Benutzers."""
+    def calculate_score(self, movie_id: int, answers: Dict[str, str], difficulty: str = 'mittel') -> Dict:
+        """Berechnet die Punktzahl für ein Quiz und gibt detaillierte Ergebnisse zurück."""
         with self.data_manager.SessionFactory() as session:
-            achievements = session.query(Achievement).join(
-                UserAchievement
-            ).filter(
-                UserAchievement.user_id == user_id
-            ).all()
+            total_questions = len(answers)
+            correct_count = 0
+            max_points_per_question = 200 if difficulty == 'schwer' else 100
+            question_results = []
+            answered_questions = []
 
-            return [
-                {
-                    'title': a.title,
-                    'description': a.description,
-                    'code': a.code,
-                    'earned_at': session.query(UserAchievement).filter_by(
-                        user_id=user_id,
-                        achievement_id=a.id
-                    ).first().earned_at
-                }
-                for a in achievements
-            ]
+            # Hole alle Fragen für diesen Film
+            questions = {
+                str(q.id): q for q in session.query(QuizQuestion).filter_by(
+                    movie_id=movie_id,
+                    difficulty=difficulty
+                ).all()
+            }
+
+            # Verarbeite jede Antwort
+            for question_id, user_answer in answers.items():
+                if question_id in questions:
+                    question = questions[question_id]
+                    is_correct = user_answer == question.correct_answer
+                    if is_correct:
+                        correct_count += 1
+
+                    # Füge detaillierte Ergebnisse für jede Frage hinzu
+                    question_results.append({
+                        'question_id': question_id,
+                        'question_text': question.question_text,
+                        'user_answer': user_answer,
+                        'correct_answer': question.correct_answer,
+                        'is_correct': is_correct
+                    })
+
+                    answered_questions.append({
+                        'question': question.question_text,
+                        'user_answer': user_answer,
+                        'correct_answer': question.correct_answer,
+                        'is_correct': is_correct
+                    })
+
+            # Berechne die Gesamtpunkte
+            score = correct_count * max_points_per_question
+
+            # Bonus für alle richtigen Antworten
+            if correct_count == total_questions:
+                score += 100
+
+            return {
+                'score': score,
+                'correct_count': correct_count,
+                'total_questions': total_questions,
+                'question_results': question_results,
+                'answered_questions': answered_questions,
+                'difficulty': difficulty
+            }

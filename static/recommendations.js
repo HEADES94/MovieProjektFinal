@@ -1,4 +1,8 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // Cache für Poster-URLs
+    const posterCache = new Map();
+    const defaultPosterUrl = '/static/default_poster.jpg';
+
     // Wenn wir auf einer Film-Detailseite sind
     const movieId = document.querySelector('[data-movie-id]')?.dataset.movieId;
     if (movieId) {
@@ -11,45 +15,75 @@ document.addEventListener('DOMContentLoaded', function() {
             const response = await fetch(`/movies/${movieId}/similar`);
             const data = await response.json();
 
-            if (data.recommendation) {
-                displayRecommendation(data.recommendation);
+            if (data.similar_movies) {
+                // Verarbeite alle Filme auf einmal
+                const container = document.createElement('div');
+                container.className = 'similar-movies-grid';
+
+                data.similar_movies.forEach(movie => {
+                    const movieElement = createMovieElement(movie);
+                    container.appendChild(movieElement);
+                });
+
+                // Füge alle Filme auf einmal zum DOM hinzu
+                const targetElement = document.querySelector('.similar-movies-section') || document.body;
+                targetElement.appendChild(container);
             }
         } catch (error) {
             console.error('Fehler beim Laden der Empfehlungen:', error);
         }
     }
 
-    // Zeige Empfehlung an
-    function displayRecommendation(recommendation) {
-        const container = document.createElement('div');
-        container.className = 'recommendation-container glass-card fade-in';
+    // Erstelle ein einzelnes Film-Element
+    function createMovieElement(movie) {
+        const element = document.createElement('div');
+        element.className = 'movie-card glass-card';
 
-        const content = `
-            <h3 class="gradient-text">Ähnlicher Film</h3>
-            <div class="recommendation-content">
-                <h4>${recommendation.title} (${recommendation.year})</h4>
-                <p class="director">Regie: ${recommendation.director}</p>
-                <p class="reasoning">${recommendation.reasoning}</p>
-                <div class="similarity-aspects">
-                    <h5>Warum dieser Film?</h5>
-                    <ul>
-                        ${recommendation.similarity_aspects.map(aspect =>
-                            `<li>${aspect}</li>`
-                        ).join('')}
-                    </ul>
-                </div>
-                ${recommendation.movie_id ?
-                    `<a href="/movies/${recommendation.movie_id}" class="btn-primary">Zum Film</a>` :
-                    ''}
+        // Verwende data-src für Lazy Loading
+        const posterUrl = movie.poster_url || defaultPosterUrl;
+
+        element.innerHTML = `
+            <img data-src="${posterUrl}"
+                 alt="${movie.title}"
+                 class="lazy-load movie-poster"
+                 loading="lazy">
+            <div class="movie-info">
+                <h3>${movie.title}</h3>
+                <p>${movie.release_year}</p>
             </div>
         `;
 
-        container.innerHTML = content;
-
-        // Füge die Empfehlung zur Seite hinzu
-        const targetElement = document.querySelector('.movie-details') || document.body;
-        targetElement.appendChild(container);
+        return element;
     }
+
+    // Lazy Loading für Bilder
+    function initLazyLoading() {
+        const lazyImages = document.querySelectorAll('img.lazy-load');
+
+        if ('IntersectionObserver' in window) {
+            const imageObserver = new IntersectionObserver((entries, observer) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const img = entry.target;
+                        img.src = img.dataset.src;
+                        img.classList.remove('lazy-load');
+                        observer.unobserve(img);
+                    }
+                });
+            });
+
+            lazyImages.forEach(img => imageObserver.observe(img));
+        } else {
+            // Fallback für ältere Browser
+            lazyImages.forEach(img => {
+                img.src = img.dataset.src;
+                img.classList.remove('lazy-load');
+            });
+        }
+    }
+
+    // Initialisiere Lazy Loading
+    initLazyLoading();
 
     // Formular für personalisierte Empfehlungen
     const preferenceForm = document.getElementById('preferenceForm');

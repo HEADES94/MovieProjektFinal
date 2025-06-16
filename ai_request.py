@@ -7,7 +7,7 @@ import requests
 from typing import Optional, Dict, List
 from dotenv import load_dotenv
 import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from google.generativeai.types import GenerationConfig
 
 # Lade Umgebungsvariablen
 load_dotenv()
@@ -20,40 +20,20 @@ OMDB_API_KEY = os.getenv("OMDB_API_KEY")
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 
 # Konfiguriere die Google AI
-generation_config = {
-    "temperature": 0.9,
-    "top_p": 1,
-    "top_k": 1,
-    "max_output_tokens": 2048,
-}
-
-safety_settings = [
-    {
-        "category": "HARM_CATEGORY_HARASSMENT",
-        "threshold": "BLOCK_NONE",
-    },
-    {
-        "category": "HARM_CATEGORY_HATE_SPEECH",
-        "threshold": "BLOCK_NONE",
-    },
-    {
-        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-        "threshold": "BLOCK_NONE",
-    },
-    {
-        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-        "threshold": "BLOCK_NONE",
-    },
-]
+generation_config = GenerationConfig(
+    temperature=0.9,
+    top_p=1,
+    top_k=1,
+    max_output_tokens=2048,
+)
 
 genai.configure(api_key=API_KEY)
 
-# Liste verfügbare Modelle
-print("Verfügbare Modelle:")
-for m in genai.list_models():
-    print(f"- {m.name}")
+# Liste verfügbare Modelle und wähle das richtige aus
+available_models = [m.name for m in genai.list_models()]
+print("Verfügbare Modelle:", available_models)
 
-def get_movie_details(title: str, year: str = None) -> Dict:
+def get_movie_details(title: str, year: str = None) -> Optional[Dict]:
     """
     Hole detaillierte Filminformationen von der OMDB API.
     """
@@ -82,67 +62,107 @@ def get_movie_details(title: str, year: str = None) -> Dict:
                 "plot": omdb_data.get("Plot", "Keine Beschreibung verfügbar.")
             }
 
-        return None
+        return {"error": "Film nicht gefunden"}
 
     except Exception as e:
         print(f"Fehler beim Abrufen der Film-Daten: {str(e)}")
-        return None
+        return {"error": f"API-Fehler: {str(e)}"}
 
 class AIRequest:
     """
     Schnittstelle zur Google Gemini AI für Filmempfehlungen und Quiz-Generierung.
     """
     def __init__(self):
-        self.model = genai.GenerativeModel("models/gemini-2.0-flash-lite",
-                                         generation_config=generation_config,
-                                         safety_settings=safety_settings)
+        try:
+            # Verwende das verfügbare Modell "models/gemini-2.0-flash"
+            self.model = genai.GenerativeModel(
+                "models/gemini-2.0-flash",
+                generation_config=generation_config
+            )
+            print("AI-Modell erfolgreich initialisiert")
+        except Exception as e:
+            print(f"Fehler bei der Modell-Initialisierung: {str(e)}")
+            raise
 
     def ai_request(self, data_string: str) -> Dict:
         """
         Fordere eine Filmempfehlung von der AI an (ohne Ausschluss).
         """
         try:
-            # Extrahiere den aktuellen Filmtitel aus dem Kontext
-            current_title = data_string.split(":")[0].strip() if ":" in data_string else data_string
+            # Extrahiere den aktuellen Filmtitel und weitere Informationen aus dem Kontext
+            current_movie = {}
+            for line in data_string.split('\n'):
+                if ':' in line:
+                    key, value = line.split(':', 1)
+                    current_movie[key.strip().lower()] = value.strip()
 
-            prompt = f"""Based on this movie, recommend a DIFFERENT movie that is similar in style or theme:
-            Current Movie: {current_title}
-            Important: DO NOT recommend the same movie ({current_title}). Choose a different but similar movie.
-            Please answer with only the movie title and year in this format:
-            {{"title": "Movie Title", "year": "YYYY"}}"""
+            prompt = f"""You are a movie recommendation system. Based on this movie:
+Title: {current_movie.get('title', '')}
+Genre: {current_movie.get('genre', '')}
+Year: {current_movie.get('year', '')}
+Description: {current_movie.get('description', '')}
+
+Recommend a DIFFERENT movie that matches the genre and style. Consider these rules:
+1. The movie MUST be different from "{current_movie.get('title', '')}"
+2. The movie should be from a similar genre: {current_movie.get('genre', '')}
+3. The movie should be either from a similar time period or thematically related
+4. Focus on the main genre when making recommendations
+
+RESPOND ONLY WITH A JSON OBJECT IN THIS EXACT FORMAT:
+{{
+    "title": "Name of the recommended movie",
+    "year": "YYYY",
+    "explanation": "A brief explanation why this movie is similar"
+}}
+
+NO additional text, ONLY the JSON object."""
 
             response = self.model.generate_content(prompt)
-            json_string = response.text.replace("```", "").strip()
+            response_text = response.text.strip()
+
+            # Entferne mögliche Markdown-Code-Block-Formatierung
+            response_text = response_text.replace('```json', '').replace('```', '').strip()
+
+            print(f"Erhaltene KI-Antwort: {response_text}")  # Debug-Ausgabe
 
             try:
-                result = json.loads(json_string)
+                # Validiere und verarbeite die Antwort
+                result = json.loads(response_text)
+
+                if not isinstance(result, dict):
+                    raise ValueError("Antwort ist kein JSON-Objekt")
+                if not all(key in result for key in ['title', 'year', 'explanation']):
+                    raise ValueError("Fehlende erforderliche Felder im JSON")
+
                 # Stelle sicher, dass nicht der gleiche Film empfohlen wird
-                if result["title"].lower() == current_title.lower():
+                if result["title"].lower() == current_movie.get('title', '').lower():
                     raise ValueError("KI hat den gleichen Film empfohlen")
 
                 # Hole detaillierte Informationen von OMDB
                 movie_details = get_movie_details(result["title"], result.get("year"))
 
                 if movie_details:
-                    # Generiere eine spezifische Begründung
-                    reasoning_prompt = f"""Given these two movies:
-                    1. {current_title}
-                    2. {movie_details['title']} ({movie_details['year']})
-                    
-                    Write a SHORT explanation (1-2 sentences) why someone who likes the first movie would enjoy the second movie."""
-
-                    reasoning_response = self.model.generate_content(reasoning_prompt)
-                    custom_reasoning = reasoning_response.text.strip()
-
                     return {
                         "movie": movie_details,
-                        "reasoning": custom_reasoning
+                        "reasoning": result["explanation"]
                     }
                 else:
                     raise ValueError("Keine Filminformationen gefunden")
 
-            except json.JSONDecodeError:
-                raise ValueError("Ungültige AI-Antwort")
+            except json.JSONDecodeError as e:
+                print(f"JSON Parsing Fehler: {e}")
+                print(f"Erhaltene Antwort: {response_text}")
+                # Versuche alternative Parsing-Methode
+                try:
+                    # Entferne mögliche Escape-Zeichen und doppelte Anführungszeichen
+                    cleaned_text = response_text.encode().decode('unicode_escape').strip('"')
+                    result = json.loads(cleaned_text)
+                    return {
+                        "movie": get_movie_details(result["title"], result.get("year")),
+                        "reasoning": result["explanation"]
+                    }
+                except:
+                    raise ValueError(f"Ungültige AI-Antwort: {str(e)}")
 
         except Exception as e:
             print(f"Fehler in ai_request: {str(e)}")
@@ -192,75 +212,6 @@ class AIRequest:
             print(f"Fehler in ai_excluded_movie_request: {str(e)}")
             raise
 
-    def generate_quiz_question(self, movie_context: str) -> Dict:
-        """
-        Generiert eine Quiz-Frage basierend auf dem Filmkontext.
-        """
-        try:
-            prompt = f"""Based on this movie information, create one interesting quiz question:
-            {movie_context}
-
-            Create a challenging but fair multiple choice question about this specific movie.
-            Focus on important details from the plot, characters, or production.
-
-            Return EXACTLY this JSON format:
-            {{
-                "question": "Write the actual question here",
-                "correct_answer": "Write the correct answer here",
-                "wrong_answers": [
-                    "First wrong but plausible answer",
-                    "Second wrong but plausible answer",
-                    "Third wrong but plausible answer"
-                ]
-            }}
-            """
-
-            response = self.model.generate_content(prompt)
-            response_text = response.text.strip()
-
-            # Extrahiere JSON aus der Antwort
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0]
-            elif "```" in response_text:
-                response_text = response_text.split("```")[1]
-
-            print(f"AI Response: {response_text}")  # Debug-Ausgabe
-
-            try:
-                quiz_data = json.loads(response_text.strip())
-                # Validiere die Struktur
-                if not all(key in quiz_data for key in ['question', 'correct_answer', 'wrong_answers']):
-                    raise ValueError("Ungültiges Fragen-Format")
-
-                if len(quiz_data['wrong_answers']) < 3:
-                    raise ValueError("Nicht genug falsche Antworten")
-
-                return {
-                    "question": quiz_data["question"],
-                    "correct_answer": quiz_data["correct_answer"],
-                    "wrong_answers": quiz_data["wrong_answers"][:3]  # Nimm maximal 3 falsche Antworten
-                }
-            except json.JSONDecodeError:
-                print(f"JSON Parse Error. Raw response: {response_text}")
-                raise ValueError("Ungültiges JSON-Format in der AI-Antwort")
-
-        except Exception as e:
-            print(f"Fehler bei der Quiz-Fragen-Generierung: {str(e)}")
-            # Erstelle eine Standard-Frage als Fallback
-            movie_title = movie_context.split("Title: ")[1].split("\n")[0] if "Title: " in movie_context else "der Film"
-            movie_year = movie_context.split("Year: ")[1].split("\n")[0] if "Year: " in movie_context else "2000"
-            movie_director = movie_context.split("Director: ")[1].split("\n")[0] if "Director: " in movie_context else "unbekannt"
-
-            return {
-                "question": f"Wer führte bei {movie_title} Regie?",
-                "correct_answer": movie_director,
-                "wrong_answers": [
-                    "Steven Spielberg",
-                    "Christopher Nolan",
-                    "Martin Scorsese"
-                ]
-            }
-
     def validate_user_question(self, question_data: Dict) -> Dict:
         """
         Überprüft eine von Benutzern vorgeschlagene Frage auf Qualität und Korrektheit.
@@ -280,12 +231,21 @@ class AIRequest:
             "improved_question": null oder verbesserte Frage im gleichen Format
         }}"""
 
-        response = self.model.generate_content(prompt)
-        return json.loads(response.text)
+        try:
+            response = self.model.generate_content(prompt)
+            result = json.loads(response.text)
+            return result
+        except Exception as e:
+            print(f"Fehler bei der Fragen-Validierung: {str(e)}")
+            return {
+                "is_valid": False,
+                "feedback": f"Fehler bei der Validierung: {str(e)}",
+                "improved_question": None
+            }
 
-    def generate_quiz_question(self, context: str) -> Dict:
+    def generate_single_quiz_question(self, context: str) -> Dict:
         """
-        Generiert eine Quiz-Frage basierend auf dem Filmkontext.
+        Generiert eine einzelne Quiz-Frage basierend auf dem Filmkontext.
 
         Args:
             context (str): Kontext über den Film (Titel, Plot, Jahr, etc.)
@@ -363,7 +323,7 @@ class AIRequest:
                 "title": "Titel des empfohlenen Films",
                 "year": "Erscheinungsjahr",
                 "director": "Regisseur",
-                "reasoning": "Detaillierte Erklärung, warum dieser Film ähnlich ist und empfohlen wird",
+                "reasoning": "Detaillierte Erklärung, warum dieser Film ähnlich ist",
                 "similarity_aspects": [
                     "Aspekt 1, warum die Filme ähnlich sind",
                     "Aspekt 2, warum die Filme ähnlich sind",
@@ -375,10 +335,31 @@ class AIRequest:
 
         try:
             response = self.model.generate_content(prompt)
-            return json.loads(response.text)
+            result = json.loads(response.text)
+            if not isinstance(result, dict) or "recommendation" not in result:
+                return {
+                    "error": "Ungültiges Antwortformat",
+                    "recommendation": {
+                        "title": "Keine Empfehlung verfügbar",
+                        "year": "",
+                        "director": "",
+                        "reasoning": "Es konnte keine passende Empfehlung generiert werden.",
+                        "similarity_aspects": []
+                    }
+                }
+            return result
         except Exception as e:
             print(f"Fehler bei der Filmempfehlung: {e}")
-            return None
+            return {
+                "error": str(e),
+                "recommendation": {
+                    "title": "Keine Empfehlung verfügbar",
+                    "year": "",
+                    "director": "",
+                    "reasoning": "Es trat ein Fehler bei der Empfehlungsgenerierung auf.",
+                    "similarity_aspects": []
+                }
+            }
 
     def get_personalized_recommendation(self, preferences: Dict) -> Dict:
         """
@@ -418,10 +399,35 @@ class AIRequest:
 
         try:
             response = self.model.generate_content(prompt)
-            return json.loads(response.text)
+            result = json.loads(response.text)
+            if not isinstance(result, dict) or "recommendation" not in result:
+                return {
+                    "error": "Ungültiges Antwortformat",
+                    "recommendation": {
+                        "title": "Keine Empfehlung verfügbar",
+                        "year": "",
+                        "genre": "",
+                        "director": "",
+                        "description": "",
+                        "reasoning": "Es konnte keine passende Empfehlung generiert werden.",
+                        "matching_criteria": []
+                    }
+                }
+            return result
         except Exception as e:
             print(f"Fehler bei der personalisierten Empfehlung: {e}")
-            return None
+            return {
+                "error": str(e),
+                "recommendation": {
+                    "title": "Keine Empfehlung verfügbar",
+                    "year": "",
+                    "genre": "",
+                    "director": "",
+                    "description": "",
+                    "reasoning": "Es trat ein Fehler bei der Empfehlungsgenerierung auf.",
+                    "matching_criteria": []
+                }
+            }
 
     def get_movie_recommendation(self, movie_context: dict) -> Optional[Dict]:
         """
@@ -446,7 +452,7 @@ Empfehle einen ähnlichen Film. Antworte NUR mit einem JSON-Objekt in genau dies
     "title": "Name des empfohlenen Films",
     "genre": "Genre des Films",
     "year": "Jahr (nur die Zahl)",
-    "explanation": "Kurze Erklärung, warum dieser Film eine gute Empfehlung ist"
+    "explanation": "Kurze Erkl��rung, warum dieser Film eine gute Empfehlung ist"
 }}"""
 
             # Generiere die Empfehlung
@@ -472,7 +478,7 @@ Empfehle einen ähnlichen Film. Antworte NUR mit einem JSON-Objekt in genau dies
                     'title': result.get('title', 'Kein Titel verfügbar'),
                     'genre': result.get('genre', 'Genre nicht verfügbar'),
                     'year': result.get('year', 'Jahr nicht verfügbar'),
-                    'explanation': result.get('explanation', 'Keine Erklärung verf��gbar')
+                    'explanation': result.get('explanation', 'Keine Erklärung verfügbar')
                 }
             except json.JSONDecodeError as e:
                 print(f"JSON Parsing Fehler: {e}")
@@ -481,3 +487,118 @@ Empfehle einen ähnlichen Film. Antworte NUR mit einem JSON-Objekt in genau dies
         except Exception as e:
             print(f"Fehler bei der KI-Anfrage: {str(e)}")
             return None
+
+    def generate_quiz_questions(self, movie_context: dict, difficulty: str) -> List[Dict]:
+        """
+        Generiert Quiz-Fragen basierend auf dem Filmkontext und dem gewünschten Schwierigkeitsgrad.
+        """
+        difficulty_guidelines = {
+            'leicht': """
+                - Fokus auf offensichtliche Fakten wie Hauptdarsteller, Genre, Jahr
+                - Einfach zu beantwortende Fragen für Gelegenheitszuschauer
+                - Keine Details aus der Handlung, die man leicht vergessen könnte
+                - Falsche Antworten sollten deutlich unterscheidbar sein
+            """,
+            'mittel': """
+                - Wichtige Handlungspunkte und zentrale Charaktere
+                - Beziehungen zwischen den Charakteren
+                - Bedeutende Szenen und Wendepunkte
+                - Produktionsdetails wie Regisseur, Drehbuch, Musik
+                - Falsche Antworten sollten plausibel aber unterscheidbar sein
+            """,
+            'schwer': """
+                - Komplexe Handlungsdetails und Subtexte
+                - Versteckte Hinweise und Easter Eggs
+                - Technische Aspekte der Filmproduktion
+                - Hintergrundinformationen und Trivia
+                - Details zu Nebenfiguren und deren Entwicklung
+                - Falsche Antworten müssen sehr plausibel sein
+            """
+        }
+
+        prompt = f"""
+        Generiere 10 Film-Quiz-Fragen für "{movie_context['title']}" ({movie_context['year']}).
+        
+        Schwierigkeitsgrad: {difficulty}
+        
+        Folgende Richtlinien für {difficulty} Fragen beachten:
+        {difficulty_guidelines[difficulty]}
+        
+        Filmkontext:
+        - Handlung: {movie_context['plot']}
+        - Genre: {movie_context['genre']}
+        - Regie: {movie_context['director']}
+        
+        Formatiere die Antwort als JSON-Array mit Objekten:
+        [{{
+            "question": "Die Frage hier",
+            "correct_answer": "Die richtige Antwort",
+            "wrong_answers": ["Falsche Antwort 1", "Falsche Antwort 2", "Falsche Antwort 3"]
+        }}]
+        
+        WICHTIGE ANFORDERUNGEN:
+        1. Keine Wiederholungen von Themen oder ähnlichen Fragen
+        2. Alle Antworten müssen faktisch korrekt/plausibel sein
+        3. Fragen müssen eindeutig beantwortbar sein
+        4. Antworten sollten etwa gleich lang sein
+        5. Keine offensichtlich falschen Antworten
+        """
+
+        try:
+            response = self.model.generate_content(prompt)
+
+            if not response.text:
+                raise ValueError("Keine Antwort von der KI erhalten")
+
+            # Bereinige die JSON-Antwort
+            response_text = response.text.strip()
+            if '```json' in response_text:
+                response_text = response_text.split('```json')[1].split('```')[0].strip()
+            elif '```' in response_text:
+                response_text = response_text.split('```')[1].strip()
+
+            questions = json.loads(response_text)
+
+            # Validiere jede Frage
+            validated_questions = []
+            for q in questions:
+                if self._validate_question(q):
+                    validated_questions.append(q)
+
+            return validated_questions[:10]  # Maximal 10 Fragen zurückgeben
+
+        except Exception as e:
+            print(f"Fehler bei der Fragengenerierung: {str(e)}")
+            return []
+
+    def _validate_question(self, question: Dict) -> bool:
+        """
+        Validiert eine einzelne Frage nach verschiedenen Qualitätskriterien.
+        """
+        try:
+            # Prüfe ob alle erforderlichen Felder vorhanden sind
+            if not all(key in question for key in ['question', 'correct_answer', 'wrong_answers']):
+                return False
+
+            # Prüfe ob genau 3 falsche Antworten vorhanden sind
+            if len(question['wrong_answers']) != 3:
+                return False
+
+            # Prüfe ob die Frage lang genug ist (mindestens 15 Zeichen)
+            if len(question['question']) < 15:
+                return False
+
+            # Prüfe ob alle Antworten unique sind
+            all_answers = [question['correct_answer']] + question['wrong_answers']
+            if len(set(all_answers)) != 4:
+                return False
+
+            # Prüfe ob keine Antwort leer ist
+            if any(not answer.strip() for answer in all_answers):
+                return False
+
+            return True
+
+        except Exception:
+            return False
+

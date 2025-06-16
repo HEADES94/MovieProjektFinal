@@ -3,6 +3,7 @@
 {% block title %}Quiz: {{ movie.title }}{% endblock %}
 
 {% block content %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
 <div class="quiz-container glass-card fade-in">
     <!-- Quiz Header -->
     <div class="quiz-header glass-card">
@@ -16,396 +17,198 @@
 
     <!-- Quiz Content -->
     <div id="quizContent">
-        {% if questions %}
+        {% if show_difficulty_selection %}
             <!-- Difficulty Selection -->
-            <div id="difficultySelection" class="difficulty-section">
+            <div id="difficultySelection" class="difficulty-section glass-card">
                 <h3>Wähle die Schwierigkeit:</h3>
                 <div class="difficulty-buttons">
-                    <button class="btn-difficulty easy" data-difficulty="leicht">Leicht</button>
-                    <button class="btn-difficulty medium" data-difficulty="mittel">Mittel</button>
-                    <button class="btn-difficulty hard" data-difficulty="schwer">Schwer</button>
+                    <a href="{{ url_for('movie_quiz', movie_id=movie.id, difficulty='leicht') }}" class="btn-difficulty easy">Leicht</a>
+                    <a href="{{ url_for('movie_quiz', movie_id=movie.id, difficulty='mittel') }}" class="btn-difficulty medium">Mittel</a>
+                    <a href="{{ url_for('movie_quiz', movie_id=movie.id, difficulty='schwer') }}" class="btn-difficulty hard">Schwer</a>
                 </div>
             </div>
-
+        {% elif questions %}
             <!-- Question Section -->
-            <div class="question-section glass-card" style="display: none;">
+            <div class="question-section glass-card">
                 <div class="quiz-progress">
                     <div class="progress-bar">
                         <div class="progress" style="width: 0%"></div>
                     </div>
-                    <div class="progress-text">
-                        <span class="question-counter">Frage 1/{{ questions|length }}</span>
-                        <span class="current-score">0 Punkte</span>
-                        <span class="difficulty-display"></span>
+                    <div class="quiz-info">
+                        <span class="question-counter">Frage 1 von {{ questions|length }}</span>
+                        <span class="current-score">Punktzahl: 0</span>
+                        <span class="difficulty-display">Schwierigkeit: {{ difficulty }}</span>
                     </div>
                 </div>
 
-                <form id="quizForm" method="post">
-                    {% for question in questions %}
-                    <div class="question-container" data-question-id="{{ loop.index0 }}" style="display: {% if loop.first %}block{% else %}none{% endif %}">
-                        <h3 class="question-text">{{ question.question }}</h3>
-                        <div class="answers-grid">
-                            {% set question_index = loop.index0 %}
-                            {% set all_answers = ([question.correct_answer] + question.wrong_answers)|shuffle %}
-                            {% for answer in all_answers %}
-                            <div class="answer-option">
-                                <input type="radio"
-                                       name="answer{{ question_index }}"
-                                       id="q{{ question_index }}a{{ loop.index0 }}"
-                                       value="{{ answer }}"
-                                       required>
-                                <label for="q{{ question_index }}a{{ loop.index0 }}">{{ answer }}</label>
-                            </div>
-                            {% endfor %}
-                        </div>
-                        <input type="hidden" name="correct{{ loop.index0 }}" value="{{ question.correct_answer }}">
-                        <input type="hidden" name="difficulty" id="selectedDifficulty">
-                    </div>
-                    {% endfor %}
+                <!-- Questions -->
+                <input type="hidden" id="movieId" value="{{ movie.id }}">
+                <input type="hidden" id="selectedDifficulty" value="{{ difficulty }}">
 
-                    <div class="quiz-navigation">
-                        <button type="button" id="prevQuestion" class="btn-secondary" style="display: none;">Zurück</button>
-                        <button type="button" id="nextQuestion" class="btn-primary">Weiter</button>
-                        <button type="submit" id="submitQuiz" class="btn-primary" style="display: none;">Quiz abschließen</button>
+                {% for question in questions %}
+                <div class="question-container"
+                     style="display: none;"
+                     data-correct-answer="{{ question.correct_answer }}"
+                     data-question-index="{{ loop.index }}"
+                     data-question-id="{{ question.id }}">
+                    <h3 class="question-text">{{ question.question_text }}</h3>
+                    <div class="options-container">
+                        {% set options = [question.correct_answer, question.wrong_answer_1, question.wrong_answer_2, question.wrong_answer_3]|shuffle %}
+                        {% for option in options %}
+                        <div class="option" data-value="{{ option }}">
+                            {{ option }}
+                        </div>
+                        {% endfor %}
                     </div>
-                </form>
+                </div>
+                {% endfor %}
+
+                <!-- Navigation -->
+                <div class="quiz-navigation">
+                    <button id="prevQuestion" class="btn btn-secondary" disabled>Zurück</button>
+                    <button id="nextQuestion" class="btn btn-primary">Weiter</button>
+                    <button id="submitQuiz" class="btn btn-success" style="display: none;" disabled>Quiz beenden</button>
+                </div>
             </div>
         {% else %}
-            <div class="no-questions-message">
-                <p>Leider sind für diesen Film noch keine Quizfragen verfügbar.</p>
-                <a href="{{ url_for('quiz_home') }}" class="btn-primary">Zurück zur Quiz-Übersicht</a>
+            <div class="no-questions glass-card">
+                <h2>Keine Fragen verfügbar</h2>
+                <p>Für diesen Film sind noch keine Quizfragen verfügbar.</p>
+                <a href="{{ url_for('quiz_home') }}" class="btn btn-primary">Zurück zur Quiz-Übersicht</a>
             </div>
         {% endif %}
     </div>
 
-    <!-- Results Section -->
+    <!-- Results Section - Moved outside of quizContent -->
     <div id="results" class="results-section glass-card" style="display: none;">
-        <h2>Quiz Ergebnis</h2>
-        <div class="score-display">
-            <div class="score-number">0</div>
-            <div class="score-text">Punkte</div>
-        </div>
-        <div class="achievement-unlocked" style="display: none;">
-            <h3>🏆 Achievement freigeschaltet!</h3>
-            <p class="achievement-name"></p>
-        </div>
-        <div class="action-buttons">
-            <a href="{{ url_for('movie_quiz', movie_id=movie.id) }}" class="btn-secondary">Erneut versuchen</a>
-            <a href="{{ url_for('quiz_home') }}" class="btn-primary">Zurück zur Übersicht</a>
-        </div>
+        <!-- Results will be populated by JavaScript -->
     </div>
 </div>
 
 <style>
-.quiz-container {
-    max-width: 800px;
-    margin: 20px auto;
-    padding: 20px;
-}
-
-.difficulty-section {
-    text-align: center;
-    margin-bottom: 30px;
-}
-
-.difficulty-buttons {
-    display: flex;
-    justify-content: center;
-    gap: 20px;
-    margin-top: 15px;
-}
-
-.btn-difficulty {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: bold;
-    transition: all 0.3s ease;
-}
-
-.btn-difficulty.easy {
-    background-color: #4CAF50;
-    color: white;
-}
-
-.btn-difficulty.medium {
-    background-color: #FFC107;
-    color: black;
-}
-
-.btn-difficulty.hard {
-    background-color: #F44336;
-    color: white;
-}
-
-.btn-difficulty:hover {
-    transform: scale(1.05);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-}
-
-.quiz-movie-info {
-    display: flex;
-    gap: 20px;
-    align-items: center;
-    margin-bottom: 20px;
-}
-
-.quiz-movie-poster {
-    width: 100px;
-    height: auto;
-    border-radius: 8px;
-}
-
-.question-container {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-}
-
-.question-text {
-    text-align: center;
-    font-size: 1.2em;
-    margin-bottom: 20px;
-    color: var(--primary-color);
-}
-
-.answers-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 15px;
-    margin-top: 20px;
-    width: 100%;
-}
-
-.answer-option {
-    position: relative;
-}
-
-.answer-option input[type="radio"] {
-    display: none;
-}
-
-.answer-option label {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    min-height: 60px;
-    padding: 15px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    word-wrap: break-word;
-    height: 100%;
-}
-
-.answer-option input[type="radio"]:checked + label {
-    background: rgba(var(--primary-color-rgb), 0.2);
-    border: 2px solid var(--primary-color);
-}
-
-.answer-option.correct label {
-    background: rgba(76, 175, 80, 0.2) !important;
-    border: 2px solid #4CAF50 !important;
-}
-
-.answer-option.incorrect label {
-    background: rgba(244, 67, 54, 0.2) !important;
-    border: 2px solid #F44336 !important;
-}
-
 .quiz-navigation {
     display: flex;
     justify-content: space-between;
-    margin-top: 30px;
+    margin-top: 20px;
+    gap: 10px;
 }
 
-.difficulty-display {
+.quiz-navigation button {
+    min-width: 120px;
+    padding: 10px 20px;
+    border-radius: 5px;
     font-weight: bold;
+    transition: all 0.3s ease;
 }
 
-.progress-bar {
-    width: 100%;
-    height: 8px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    overflow: hidden;
-    margin-bottom: 10px;
+.quiz-navigation button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
-.progress {
-    height: 100%;
-    background: var(--primary-color);
-    transition: width 0.3s ease;
+.btn-success {
+    background-color: #28a745;
+    color: white;
+    border: none;
 }
 
-.progress-text {
-    display: flex;
-    justify-content: space-between;
-    color: #666;
-    font-size: 14px;
+.btn-success:hover:not(:disabled) {
+    background-color: #218838;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
+.btn-success:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+/* Results Styles */
 .results-section {
-    text-align: center;
+    margin-top: 2rem;
+    text-align: left;
 }
 
-.score-display {
-    margin: 30px 0;
+.question-result {
+    margin-bottom: 1.5rem;
+    padding: 1.5rem;
+    border-radius: 8px;
+    background: var(--bg-card);
+}
+
+.question-result.correct {
+    border-left: 4px solid var(--success);
+}
+
+.question-result.incorrect {
+    border-left: 4px solid var(--error);
+}
+
+.score-info {
+    text-align: center;
+    margin: 2rem 0;
+}
+
+.score-circle {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    border: 4px solid var(--primary);
+    background: var(--bg-glass);
+    margin-bottom: 1rem;
 }
 
 .score-number {
-    font-size: 48px;
+    font-size: 2.5rem;
     font-weight: bold;
-    color: var(--primary-color);
+    color: var(--primary);
 }
 
-.achievement-unlocked {
-    margin: 20px 0;
-    padding: 20px;
-    background: rgba(255, 215, 0, 0.1);
-    border-radius: 8px;
+.score-label {
+    font-size: 1rem;
+    color: var(--text-secondary);
 }
 
-.action-buttons {
+.quiz-stats {
+    text-align: center;
+    margin: 2rem 0;
+}
+
+.questions-summary {
+    margin-top: 2rem;
+}
+
+.question-result h4 {
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+.user-answer {
+    margin: 0.5rem 0;
+    padding: 0.5rem;
+    border-radius: 4px;
+}
+
+.text-success {
+    color: var(--success);
+}
+
+.text-danger {
+    color: var(--error);
+}
+
+.quiz-actions {
     display: flex;
-    gap: 15px;
     justify-content: center;
-    margin-top: 30px;
+    gap: 1rem;
+    margin-top: 2rem;
 }
 </style>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const difficultySection = document.getElementById('difficultySelection');
-    const questionSection = document.querySelector('.question-section');
-    const difficultyButtons = document.querySelectorAll('.btn-difficulty');
-    const difficultyDisplay = document.querySelector('.difficulty-display');
-    const selectedDifficultyInput = document.getElementById('selectedDifficulty');
-    const quizForm = document.getElementById('quizForm');
-    const nextButton = document.getElementById('nextQuestion');
-    const prevButton = document.getElementById('prevQuestion');
-    const submitButton = document.getElementById('submitQuiz');
-    const questionContainers = document.querySelectorAll('.question-container');
-    const progressBar = document.querySelector('.progress');
-    const questionCounter = document.querySelector('.question-counter');
-    const currentScore = document.querySelector('.current-score');
-
-    let currentQuestion = 0;
-    const totalQuestions = questionContainers.length;
-    let score = 0;
-
-    // Difficulty Selection Handler
-    difficultyButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const difficulty = this.dataset.difficulty;
-            selectedDifficultyInput.value = difficulty;
-            difficultySection.style.display = 'none';
-            questionSection.style.display = 'block';
-            difficultyDisplay.textContent = `Schwierigkeit: ${difficulty}`;
-            updateNavigation();
-        });
-    });
-
-    function updateNavigation() {
-        // Update Progress
-        const progress = ((currentQuestion + 1) / totalQuestions) * 100;
-        progressBar.style.width = `${progress}%`;
-        questionCounter.textContent = `Frage ${currentQuestion + 1}/${totalQuestions}`;
-
-        // Show/Hide Questions
-        questionContainers.forEach((q, index) => {
-            q.style.display = index === currentQuestion ? 'block' : 'none';
-        });
-
-        // Update Navigation Buttons
-        prevButton.style.display = currentQuestion > 0 ? 'block' : 'none';
-        nextButton.style.display = currentQuestion < totalQuestions - 1 ? 'block' : 'none';
-        submitButton.style.display = currentQuestion === totalQuestions - 1 ? 'block' : 'none';
-    }
-
-    function checkAnswer(questionIndex) {
-        const selectedAnswer = document.querySelector(`input[name="answer${questionIndex}"]:checked`);
-        const correctAnswer = document.querySelector(`input[name="correct${questionIndex}"]`).value;
-
-        if (selectedAnswer) {
-            const allOptions = document.querySelectorAll(`input[name="answer${questionIndex}"]`);
-            allOptions.forEach(option => {
-                const optionDiv = option.closest('.answer-option');
-                if (option.value === correctAnswer) {
-                    optionDiv.classList.add('correct');
-                } else if (option === selectedAnswer) {
-                    optionDiv.classList.add('incorrect');
-                }
-                option.disabled = true;
-            });
-
-            // Verzögere den Übergang zur nächsten Frage um 1,5 Sekunden
-            if (currentQuestion < totalQuestions - 1) {
-                setTimeout(() => {
-                    currentQuestion++;
-                    updateNavigation();
-                    // Entferne die Markierungen für die nächste Frage
-                    const nextOptions = document.querySelectorAll(`input[name="answer${currentQuestion}"]`);
-                    nextOptions.forEach(option => {
-                        const optionDiv = option.closest('.answer-option');
-                        optionDiv.classList.remove('correct', 'incorrect');
-                        option.disabled = false;
-                    });
-                }, 1500);
-            }
-            return option.value === correctAnswer;
-        }
-        return false;
-    }
-
-    // Navigation Handlers
-    nextButton?.addEventListener('click', function() {
-        const currentRadio = document.querySelector(`input[name="answer${currentQuestion}"]:checked`);
-        if (!currentRadio) {
-            alert('Bitte wähle eine Antwort aus.');
-            return;
-        }
-        checkAnswer(currentQuestion);
-    });
-
-    prevButton?.addEventListener('click', function() {
-        if (currentQuestion > 0) {
-            currentQuestion--;
-            updateNavigation();
-        }
-    });
-
-    // Quiz Submission Handler
-    quizForm?.addEventListener('submit', function(e) {
-        e.preventDefault();
-        const formData = new FormData(quizForm);
-
-        fetch(`{{ url_for('submit_quiz', movie_id=movie.id) }}`, {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            document.querySelector('.question-section').style.display = 'none';
-            document.getElementById('results').style.display = 'block';
-            document.querySelector('.score-number').textContent = data.score;
-
-            // Achievement Check
-            if (data.achievements?.length > 0) {
-                const achievementSection = document.querySelector('.achievement-unlocked');
-                achievementSection.style.display = 'block';
-                achievementSection.querySelector('.achievement-name').textContent =
-                    data.achievements.map(a => a.title).join(', ');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Ein Fehler ist aufgetreten. Bitte versuche es erneut.');
-        });
-    });
-});
-</script>
+{% block scripts %}
+<script src="{{ url_for('static', filename='quiz.js') }}"></script>
+{% endblock %}
 {% endblock %}

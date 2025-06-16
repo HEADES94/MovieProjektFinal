@@ -14,6 +14,24 @@
         {% endif %}
     {% endwith %}
 
+    <div class="recommendation-form glass-card">
+        <h3>Was möchten Sie sehen?</h3>
+        <form method="POST" action="{{ url_for('recommendation', user_id=user.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label for="genre">Genre auswählen:</label>
+                <select name="genre_preference" id="genre" class="form-control" required>
+                    <option value="">Bitte wählen Sie...</option>
+                    <option value="Action & Spannung">Action & Spannung</option>
+                    <option value="Drama & Gefühl">Drama & Gefühl</option>
+                    <option value="Comedy & Humor">Comedy & Humor</option>
+                    <option value="Horror & Mystery">Horror & Mystery</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Film finden</button>
+        </form>
+    </div>
+
     {% if recommendation %}
         <div class="movie-recommendation glass-card">
             <div class="movie-poster">
@@ -52,13 +70,6 @@
             </div>
         </div>
     {% endif %}
-
-    <div class="recommendation-form glass-card">
-        <h3>Neue Empfehlung generieren</h3>
-        <form method="POST" class="preference-form">
-            <button type="submit" class="btn-primary">Neue Empfehlung generieren</button>
-        </form>
-    </div>
 </div>
 
 <style>

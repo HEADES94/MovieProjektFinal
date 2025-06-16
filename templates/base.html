@@ -3,8 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}MovieProjekt{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <!-- Preload für häufig verwendete Bilder -->
+    <link rel="preload" as="image" href="{{ url_for('static', filename='default_poster.jpg') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     {% block head %}{% endblock %}
 </head>
@@ -57,5 +60,39 @@
 
     <script src="{{ url_for('static', filename='action.js') }}"></script>
     {% block scripts %}{% endblock %}
+    <script>
+        // Globale Funktion für Bildoptimierung
+        function initImageOptimization() {
+            // Cache für bereits geladene Bilder
+            const imageCache = new Set();
+
+            // Intersection Observer für Lazy Loading
+            const imageObserver = new IntersectionObserver((entries, observer) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const img = entry.target;
+                        if (!imageCache.has(img.dataset.src)) {
+                            img.src = img.dataset.src;
+                            img.onload = () => {
+                                img.classList.add('loaded');
+                                imageCache.add(img.dataset.src);
+                            };
+                            observer.unobserve(img);
+                        }
+                    }
+                });
+            }, {
+                rootMargin: '50px 0px' // Lädt Bilder etwas früher
+            });
+
+            // Beobachte alle Bilder mit lazy-load Klasse
+            document.querySelectorAll('img.lazy-load').forEach(img => {
+                imageObserver.observe(img);
+            });
+        }
+
+        // Initialisiere Bildoptimierung nach dem Laden der Seite
+        document.addEventListener('DOMContentLoaded', initImageOptimization);
+    </script>
 </body>
 </html>

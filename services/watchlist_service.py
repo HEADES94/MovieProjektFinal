@@ -4,7 +4,7 @@ watchlist_service.py - Service für die Watchlist-Funktionalität
 from datetime import datetime
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from data_models import WatchlistItem, Movie, User
+from data_models import WatchlistItem, Movie, User, UserAchievement
 from services.achievement_service import AchievementService
 from datamanager.data_manager_interface import DataManagerInterface
 
@@ -48,11 +48,19 @@ class WatchlistService:
 
                 session.add(watchlist_item)
                 session.commit()
-                session.refresh(watchlist_item)
 
-                # Prüfe auf neue Achievements mit der aktuellen Session
-                achievement_service = AchievementService(session)
-                achievement_service.check_achievements(user_id)
+                # Achievement prüfen und ggf. vergeben
+                achievement_service = AchievementService(self.data_manager)
+                with self.data_manager.SessionFactory() as session2:
+                    count = session2.query(WatchlistItem).filter_by(user_id=user_id).count()
+                    # Achievement vergeben, wenn mindestens 10 Einträge und noch nicht erhalten
+                    user_ach = session2.query(UserAchievement).join(Achievement).filter(
+                        UserAchievement.user_id == user_id,
+                        Achievement.code == 'watchlist_add_10'
+                    ).first()
+                    if count >= 10 and not user_ach:
+                        achievement_service._grant_achievement(user_id, 'watchlist_add_10', session2)
+                    session2.commit()
 
                 return watchlist_item
 
