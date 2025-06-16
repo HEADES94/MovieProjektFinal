@@ -16,6 +16,27 @@ session = Session()
 # Basisklasse für deklarative Modelle
 Base = declarative_base()
 
+class Movie(Base):
+    __tablename__ = 'movies'
+    id = Column(Integer, primary_key=True)
+    title = Column(String(255), nullable=False)
+    release_year = Column(Integer)
+    description = Column(Text)
+    genre = Column(String(255))
+    director = Column(String(255))
+    rating = Column(Float)
+    poster_url = Column(String(500))
+    country = Column(String(255))
+
+    # Beziehungen mit overlaps-Parameter
+    movie_actors = relationship('MovieActor', back_populates='movie', overlaps="actors,movies")
+    actors = relationship('Actor', secondary='movie_actors', back_populates='movies', overlaps="movie_actors")
+    reviews = relationship('Review', back_populates='movie')
+    quiz_questions = relationship('QuizQuestion', back_populates='movie')
+
+    def __repr__(self) -> str:
+        return f"<Movie(title={self.title}, id={self.id if self.id else 'None'})>"
+
 class User(UserMixin, Base):
     """
     User-Modell: Ein Benutzer kann mehrere Filme bewerten.
@@ -54,57 +75,40 @@ class User(UserMixin, Base):
     def __repr__(self) -> str:
         return f"<User(name='{self.name}', id={self.id if self.id else 'None'})>"
 
-class Movie(Base):
-    """
-    Movie-Modell: Ein Film kann von mehreren Benutzern bewertet werden.
-    """
-    __tablename__ = 'movies'
-    id = Column(Integer, primary_key=True)
-    title = Column(String, nullable=False)
-    description = Column(Text)
-    release_year = Column(Integer)
-    genre = Column(String)
-    poster_url = Column(String)
-    director = Column(String)
-    rating = Column(Float)
-    country = Column(String)
-    plot = Column(Text)
-
-    # Relationships
-    actors = relationship("Actor", secondary="movie_actors", back_populates="movies")
-    reviews = relationship("Review", back_populates="movie")
-    quiz_questions = relationship("QuizQuestion", back_populates="movie")
-
-    def __repr__(self) -> str:
-        return f"<Movie(title={self.title}, id={self.id if self.id else 'None'})>"
-
 class Actor(Base):
     __tablename__ = 'actors'
     id = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False)
+    name = Column(String(255), nullable=False)
     birth_year = Column(Integer)
     bio = Column(Text)
 
-    movies = relationship("Movie", secondary="movie_actors", back_populates="actors", overlaps="actors")
+    # Beziehungen mit overlaps-Parameter
+    movie_actors = relationship('MovieActor', back_populates='actor', overlaps="actors,movies")
+    movies = relationship('Movie', secondary='movie_actors', back_populates='actors', overlaps="movie_actors")
 
 class MovieActor(Base):
     __tablename__ = 'movie_actors'
     id = Column(Integer, primary_key=True)
-    movie_id = Column(Integer, ForeignKey('movies.id'))
-    actor_id = Column(Integer, ForeignKey('actors.id'))
-    role_name = Column(String)
+    movie_id = Column(Integer, ForeignKey('movies.id'), nullable=False)
+    actor_id = Column(Integer, ForeignKey('actors.id'), nullable=False)
+    role_name = Column(String(255))
+
+    # Beziehungen mit overlaps-Parameter
+    movie = relationship('Movie', back_populates='movie_actors', overlaps="actors,movies")
+    actor = relationship('Actor', back_populates='movie_actors', overlaps="actors,movies")
 
 class Review(Base):
     __tablename__ = 'reviews'
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'))
-    movie_id = Column(Integer, ForeignKey('movies.id'))
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    movie_id = Column(Integer, ForeignKey('movies.id'), nullable=False)
     rating = Column(Integer)
     comment = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    user = relationship("User", back_populates="reviews")
-    movie = relationship("Movie", back_populates="reviews")
+    # Beziehungen
+    user = relationship('User', back_populates='reviews')
+    movie = relationship('Movie', back_populates='reviews')
 
 class WatchlistItem(Base):
     __tablename__ = 'watchlist'
@@ -133,17 +137,17 @@ class QuizQuestion(Base):
     id = Column(Integer, primary_key=True)
     movie_id = Column(Integer, ForeignKey('movies.id'))
     question_text = Column(Text, nullable=False)
-    correct_answer = Column(String, nullable=False)
-    wrong_answer_1 = Column(String, nullable=False)
-    wrong_answer_2 = Column(String, nullable=False)
-    wrong_answer_3 = Column(String, nullable=False)
-    source = Column(String, default='manual')
+    correct_answer = Column(Text, nullable=False)
+    wrong_answer_1 = Column(Text, nullable=False)
+    wrong_answer_2 = Column(Text, nullable=False)
+    wrong_answer_3 = Column(Text, nullable=False)
+    source = Column(String)  # 'manual' oder 'ai'
     question_usage_count = Column(Integer, default=0)
     correct_answer_rate = Column(Float, default=0.0)
-    difficulty = Column(String, default='medium')
+    difficulty = Column(String)  # 'easy', 'medium', 'hard'
 
     movie = relationship("Movie", back_populates="quiz_questions")
-    ai_metadata = relationship("AIQuestionMetadata", back_populates="question")
+    ai_metadata = relationship("AIQuestionMetadata", back_populates="question", uselist=False)
 
 class AIQuestionMetadata(Base):
     __tablename__ = 'ai_question_metadata'
@@ -163,6 +167,8 @@ class QuizAttempt(Base):
     movie_id = Column(Integer, ForeignKey('movies.id'))
     score = Column(Integer)
     correct_count = Column(Integer)
+    max_possible_score = Column(Integer, default=10)  # Standardmäßig 10 Punkte
+    difficulty = Column(String, default='mittel')  # 'leicht', 'mittel', 'schwer'
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="quiz_attempts")
@@ -185,12 +191,12 @@ class SuggestedQuestion(Base):
     user_id = Column(Integer, ForeignKey('users.id'))
     movie_id = Column(Integer, ForeignKey('movies.id'))
     question_text = Column(Text, nullable=False)
-    correct_answer = Column(String, nullable=False)
-    wrong_answer_1 = Column(String, nullable=False)
-    wrong_answer_2 = Column(String, nullable=False)
-    wrong_answer_3 = Column(String, nullable=False)
+    correct_answer = Column(Text, nullable=False)
+    wrong_answer_1 = Column(Text, nullable=False)
+    wrong_answer_2 = Column(Text, nullable=False)
+    wrong_answer_3 = Column(Text, nullable=False)
     submitted_at = Column(DateTime, default=datetime.utcnow)
-    status = Column(String, default='pending')
+    status = Column(String, default='pending')  # 'pending', 'approved', 'rejected'
 
     user = relationship("User", back_populates="suggested_questions")
     movie = relationship("Movie")
@@ -201,7 +207,7 @@ class QuestionVote(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'))
     suggested_question_id = Column(Integer, ForeignKey('suggested_questions.id'))
-    vote = Column(Integer)  # 1 für Upvote, -1 für Downvote
+    vote = Column(Integer)  # 1 für upvote, -1 für downvote
     voted_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
@@ -210,9 +216,9 @@ class QuestionVote(Base):
 class Achievement(Base):
     __tablename__ = 'achievements'
     id = Column(Integer, primary_key=True)
-    title = Column(String, nullable=False)
+    title = Column(String(255), nullable=False)
     description = Column(Text)
-    icon_url = Column(String)
+    code = Column(String(50), unique=True)  # Eindeutiger Code für jedes Achievement
 
     users = relationship("User", secondary="user_achievements", back_populates="achievements", overlaps="achievements")
 
@@ -225,28 +231,31 @@ class UserAchievement(Base):
 
 class UserMovie(Base):
     """
-    UserMovie-Modell: Verbindungstabelle zwischen Benutzern und Filmen.
-    Enthält zusätzliche Informationen wie Bewertung und Kommentar.
+    UserMovie-Modell: Verknüpft Benutzer mit ihren persönlichen Filminformationen
     """
     __tablename__ = 'user_movies'
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'))
     movie_id = Column(Integer, ForeignKey('movies.id'))
-    user_rating = Column(Float)
-    user_comment = Column(String)
+    watched = Column(Boolean, default=False)
+    favorite = Column(Boolean, default=False)
+    personal_rating = Column(Integer)
+    watch_date = Column(DateTime)
+    notes = Column(Text)
 
-    # Beziehungen
-    user = relationship("User")
+    user = relationship("User", back_populates="user_movies")
     movie = relationship("Movie")
 
-    def __repr__(self) -> str:
-        return f"<UserMovie(user_id={self.user_id}, movie_id={self.movie_id}, rating={self.user_rating})>"
-
-def init_db(db_url):
-    """Initialisiere die Datenbank mit allen Tabellen."""
-    engine = create_engine(db_url)
+def init_db(db_url=None):
+    """Initialisiert die Datenbank und erstellt alle Tabellen"""
+    global engine
+    if db_url:
+        engine = create_engine(db_url)
     Base.metadata.create_all(engine)
-    return engine
+
+def drop_db():
+    """Löscht alle Tabellen"""
+    Base.metadata.drop_all(engine)
 
 if __name__ == "__main__":
     # Erstelle die Tabellen, falls das Skript direkt ausgeführt wird.

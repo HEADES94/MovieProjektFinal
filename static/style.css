@@ -334,6 +334,73 @@ body {
     transform: rotate(15deg);
 }
 
+/* Recommendations Layout */
+.recommendations-container {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 2rem;
+    margin-top: 2rem;
+}
+
+.similar-movies-section,
+.ai-recommendations-section {
+    padding: 2rem;
+    border-radius: 16px;
+    background: var(--card-background);
+}
+
+.ai-recommendations {
+    margin-top: 1rem;
+}
+
+.ai-rec-info {
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.ai-explanation {
+    margin-top: 1rem;
+    font-style: italic;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+/* Generate Recommendation Button and Loader */
+.generate-recommendation-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+}
+
+.btn-icon {
+    font-size: 1.2em;
+}
+
+.loading-spinner {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.loading-spinner::before {
+    content: '';
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--primary);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .container {
@@ -353,5 +420,9 @@ body {
     .nav-links {
         flex-wrap: wrap;
         justify-content: center;
+    }
+
+    .recommendations-container {
+        grid-template-columns: 1fr;
     }
 }

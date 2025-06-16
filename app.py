@@ -4,12 +4,13 @@ MovieProjekt Flask App
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from sqlalchemy.orm import joinedload
+from sqlalchemy import func, case
 import random
 from datetime import datetime, timedelta
 
 from ai_request import AIRequest
 from datamanager.sqlite_data_manager import SQliteDataManager
-from data_models import User, Movie, UserMovie, SuggestedQuestion, Review, WatchlistItem, QuizAttempt, UserAchievement
+from data_models import User, Movie, UserMovie, SuggestedQuestion, Review, WatchlistItem, QuizAttempt, UserAchievement, Achievement
 from movie_api import OMDBClient
 from services.quiz_service import QuizService
 from services.auth_service import AuthService, init_login_manager
@@ -38,6 +39,10 @@ data_manager = SQliteDataManager("sqlite:///movie_app.db")
 ai_client = AIRequest()
 login_manager = init_login_manager(app)
 movie_update_service = MovieUpdateService(data_manager)
+
+# Auth-Service und Watchlist-Service initialisieren
+auth_service = AuthService(data_manager)
+watchlist_service = WatchlistService(data_manager)
 
 def update_movies():
     """Aktualisiert die Filmdatenbank mit neuen Filmen"""
@@ -110,49 +115,80 @@ def list_users():
 # User movies in a list view
 @app.route('/users/<user_id>', methods=["GET", "POST"])
 def user_movies(user_id):
-    if request.method == "GET":
-        chosen_user = data_manager.get_user(user_id)
-        user_movies_list = data_manager.get_user_movies(user_id)
-        return render_template("user_movies.html", user_movies=user_movies_list,
-                    user=chosen_user)
-    elif request.method == "POST":
-        chosen_user = data_manager.get_user(user_id)
-        movie_title = request.form["name"]
-        with data_manager.SessionFactory() as session:
-            movie = session.query(Movie).filter_by(name=movie_title).first()
+    with data_manager.SessionFactory() as session:
+        if request.method == "GET":
+            chosen_user = session.get(User, user_id)
+            if not chosen_user:
+                return render_template("404.html"), 404
+
+            user_movies_list = session.query(UserMovie).filter_by(user_id=user_id).all()
+            return render_template("user_movies.html",
+                                user_movies=user_movies_list,
+                                user=chosen_user)
+
+        elif request.method == "POST":
+            chosen_user = session.get(User, user_id)
+            if not chosen_user:
+                return render_template("404.html"), 404
+
+            movie_title = request.form["name"]
+            movie = session.query(Movie).filter_by(title=movie_title).first()
+
             if movie is None:
                 try:
-                    movie = data_manager.set_movie(movie_title)
+                    # Verwende den movie_update_service um den Film hinzuzufügen
+                    movie = movie_update_service.add_movie(movie_title)
                     if movie is None:
-                        raise Exception("Movie not found")
-                    data_manager.set_user_movies(user_id=user_id, movie_id=movie.id)
-                    user_movies_list = data_manager.get_user_movies(user_id)
+                        raise Exception("Film konnte nicht gefunden werden")
+
+                    new_user_movie = UserMovie(user_id=user_id, movie_id=movie.id)
+                    session.add(new_user_movie)
+                    session.commit()
+
+                    user_movies_list = session.query(UserMovie).filter_by(user_id=user_id).all()
                     return render_template("user_movies.html",
-                                           user_movies=user_movies_list,
-                                           user=chosen_user, success=True)
+                                        user_movies=user_movies_list,
+                                        user=chosen_user,
+                                        success=True)
                 except Exception as e:
                     session.rollback()
-                    user_movies_list = data_manager.get_user_movies(user_id)
+                    user_movies_list = session.query(UserMovie).filter_by(user_id=user_id).all()
                     return render_template("user_movies.html",
-                                           user_movies=user_movies_list,
-                                           user=chosen_user, success=False, error=e)
+                                        user_movies=user_movies_list,
+                                        user=chosen_user,
+                                        success=False,
+                                        error=str(e))
             else:
-                if data_manager.get_user_movie(user_id, movie.id):
+                existing_user_movie = session.query(UserMovie).filter_by(
+                    user_id=user_id,
+                    movie_id=movie.id
+                ).first()
+
+                if existing_user_movie:
+                    user_movies_list = session.query(UserMovie).filter_by(user_id=user_id).all()
                     return render_template("user_movies.html",
-                                           user_movies=data_manager.get_user_movies(user_id),
-                                           user=chosen_user, success=False,
-                                           error="Movie already exists")
+                                        user_movies=user_movies_list,
+                                        user=chosen_user,
+                                        success=False,
+                                        error="Film ist bereits in der Liste")
                 try:
-                    data_manager.set_user_movies(user_id=user_id, movie_id=movie.id)
-                    user_movies_list = data_manager.get_user_movies(user_id)
+                    new_user_movie = UserMovie(user_id=user_id, movie_id=movie.id)
+                    session.add(new_user_movie)
+                    session.commit()
+
+                    user_movies_list = session.query(UserMovie).filter_by(user_id=user_id).all()
                     return render_template("user_movies.html",
-                                           user_movies=user_movies_list,
-                                           user=chosen_user, success=True)
+                                        user_movies=user_movies_list,
+                                        user=chosen_user,
+                                        success=True)
                 except Exception as e:
                     session.rollback()
+                    user_movies_list = session.query(UserMovie).filter_by(user_id=user_id).all()
                     return render_template("user_movies.html",
-                                           user_movies=data_manager.get_user_movies(user_id),
-                                           user=chosen_user, success=False, error=e)
+                                        user_movies=user_movies_list,
+                                        user=chosen_user,
+                                        success=False,
+                                        error=str(e))
 
 
 # single user movie view for updating
@@ -203,108 +239,213 @@ def new_user():
 # Adding new movies
 @app.route('/movies/new', methods=["GET", "POST"])
 def new_movie():
-    if request.method == "GET":
-        return render_template("new_movie.html")
-    elif request.method == "POST":
-        title = request.form["name"]
-        try:
-            with data_manager.SessionFactory() as session:
-                movie = data_manager.set_movie(title)
-                if movie is None:
-                    flash('Film konnte nicht gefunden werden: ' + title, 'error')
-                    return render_template("new_movie.html", success=False)
+    if request.method == "POST":
+        movie_title = request.form.get('name')
+        if not movie_title:
+            return render_template('new_movie.html', error='Bitte geben Sie einen Filmtitel ein')
 
-                # Binde das Movie-Objekt an die aktuelle Session
-                movie = session.merge(movie)
-                session.refresh(movie)
-                flash(f'Film "{movie.title}" wurde erfolgreich hinzugefügt!', 'success')
-                return render_template("new_movie.html", success=True)
+        try:
+            # Versuche den Film hinzuzufügen
+            movie = movie_update_service.add_movie(movie_title)
+
+            if movie is None:
+                return render_template('new_movie.html',
+                                    error=f'Film konnte nicht gefunden werden: {movie_title}',
+                                    movie_name=movie_title)
+            else:
+                return render_template('new_movie.html',
+                                    success=True,
+                                    movie_name=movie.title)
 
         except Exception as e:
-            flash('Ein Fehler ist aufgetreten beim Hinzufügen des Films. Bitte versuchen Sie es erneut.', 'error')
-            return render_template("new_movie.html", success=False)
+            return render_template('new_movie.html',
+                                error=str(e),
+                                movie_name=movie_title)
 
+    return render_template('new_movie.html')
 
 # see list of all movies in database
 @app.route('/movies', methods=["GET", "POST"])
 def list_movies():
     if request.method == "GET":
+        search_query = request.args.get('search', '')
+        sort_by = request.args.get('sort', 'rating')  # Standard: Nach Bewertung sortieren
+
         with data_manager.SessionFactory() as session:
-            # Sortiere die Filme nach Rating (absteigend)
-            movies = session.query(Movie).order_by(Movie.rating.desc()).all()
-            return render_template("movies.html", movies=movies)
+            # Basis-Query erstellen
+            query = session.query(Movie)
+
+            # Suche anwenden, wenn vorhanden
+            if search_query:
+                search_terms = f"%{search_query}%"
+                query = query.filter(
+                    Movie.title.ilike(search_terms) |
+                    Movie.description.ilike(search_terms) |
+                    Movie.genre.ilike(search_terms) |
+                    Movie.director.ilike(search_terms)
+                )
+
+            # Sortierung anwenden
+            if sort_by == 'title':
+                query = query.order_by(Movie.title)
+            elif sort_by == 'year_desc':
+                query = query.order_by(Movie.release_year.desc())
+            elif sort_by == 'year_asc':
+                query = query.order_by(Movie.release_year)
+            else:  # default: rating
+                query = query.order_by(Movie.rating.desc())
+
+            # Filme abrufen
+            movies = query.all()
+
+            return render_template("movies.html",
+                                movies=movies,
+                                sort_by=sort_by,
+                                search_query=search_query)
+
     elif request.method == "POST":
         movie_id = request.form["movie_id"]
         with data_manager.SessionFactory() as session:
             deleted = data_manager.delete_movie(int(movie_id))
-            # Nach Löschen auch sortiert zurückgeben
             movies = session.query(Movie).order_by(Movie.rating.desc()).all()
-            return render_template("movies.html", movies=movies, success=deleted)
+            return render_template("movies.html",
+                                movies=movies,
+                                success=deleted)
 
 
 # get details of a single movie
 @app.route('/movies/<movie_id>', methods=["GET", "POST"])
+@login_required
 def movie_details(movie_id):
-    if request.method == "GET":
-        with data_manager.SessionFactory() as session:
-            movie = session.query(Movie).get(movie_id)
-            if not movie:
-                return render_template("404.html"), 404
+    with data_manager.SessionFactory() as session:
+        movie = session.get(Movie, movie_id, options=[
+            joinedload(Movie.actors),
+            joinedload(Movie.reviews).joinedload(Review.user)
+        ])
 
-            # Basis-Statistiken initialisieren
-            stats = {
-                'quiz_attempts': 0,
-                'avg_score': 0,
-                'completion_rate': 0
-            }
+        if not movie:
+            return render_template('404.html'), 404
 
-            # Quiz-Historie initialisieren
-            quiz_history = []
+        # POST-Methode für neue Bewertungen
+        if request.method == "POST":
+            try:
+                # Hole die Bewertungsdaten aus dem Formular
+                rating = int(request.form.get('rating'))
+                comment = request.form.get('comment')
 
-            if current_user.is_authenticated:
-                # Prüfe, ob Film in der Watchlist ist
-                watchlist_item = session.query(WatchlistItem).filter_by(
+                # Überprüfe ob der Benutzer bereits eine Bewertung abgegeben hat
+                existing_review = session.query(Review).filter_by(
                     user_id=current_user.id,
                     movie_id=movie_id
                 ).first()
-                movie.in_watchlist = watchlist_item is not None
 
-                # Quiz-Statistiken laden
-                quiz_attempts = session.query(QuizAttempt).filter_by(
-                    movie_id=movie_id
-                ).all()
+                if existing_review:
+                    # Aktualisiere bestehende Bewertung
+                    existing_review.rating = rating
+                    existing_review.comment = comment
+                    existing_review.updated_at = datetime.utcnow()
+                else:
+                    # Erstelle neue Bewertung
+                    review = Review(
+                        user_id=current_user.id,
+                        movie_id=movie_id,
+                        rating=rating,
+                        comment=comment,
+                        created_at=datetime.utcnow()
+                    )
+                    session.add(review)
 
-                if quiz_attempts:
-                    stats['quiz_attempts'] = len(quiz_attempts)
-                    total_score = sum(attempt.score for attempt in quiz_attempts)
-                    stats['avg_score'] = round(total_score / len(quiz_attempts), 1)
-                    completed = sum(1 for attempt in quiz_attempts if attempt.score >= 70)
-                    stats['completion_rate'] = round((completed / len(quiz_attempts)) * 100)
+                session.commit()
+                flash('Ihre Bewertung wurde erfolgreich gespeichert.', 'success')
+            except Exception as e:
+                session.rollback()
+                flash('Fehler beim Speichern der Bewertung.', 'error')
+                app.logger.error(f"Fehler bei Bewertung: {str(e)}")
 
-                # Persönliche Quiz-Historie
-                user_attempts = session.query(QuizAttempt).filter_by(
-                    user_id=current_user.id,
-                    movie_id=movie_id
-                ).order_by(QuizAttempt.created_at.desc()).all()
+        # Prüfe Watchlist-Status wenn Benutzer eingeloggt ist
+        if current_user.is_authenticated:
+            movie.in_watchlist = watchlist_service.is_in_watchlist(current_user.id, int(movie_id))
 
-                quiz_history = [{
-                    'date': attempt.created_at.strftime('%d.%m.%Y'),
-                    'score': attempt.score,
-                    'progress': attempt.score
-                } for attempt in user_attempts]
+        # Berechne die Quiz-Statistiken
+        quiz_attempts = session.query(QuizAttempt).filter_by(movie_id=movie_id).count()
+        if quiz_attempts > 0:
+            avg_score = session.query(func.avg(QuizAttempt.score)).filter_by(movie_id=movie_id).scalar() or 0
+            completion_rate = session.query(
+                func.count(case((QuizAttempt.score > 0, 1))) * 100.0 / func.count()
+            ).filter_by(movie_id=movie_id).scalar() or 0
+        else:
+            avg_score = 0
+            completion_rate = 0
 
-            return render_template(
-                "movie_details.html",
-                movie=movie,
-                stats=stats,
-                quiz_history=quiz_history
-            )
-    elif request.method == "POST":
-        movie_id = request.form["movie_id"]
-        with data_manager.SessionFactory() as session:
-            deleted = data_manager.delete_movie(int(movie_id))
-            movies = session.query(Movie).order_by(Movie.rating.desc()).all()
-            return render_template("movies.html", movies=movies, success=deleted)
+        stats = {
+            'quiz_attempts': quiz_attempts,
+            'avg_score': round(float(avg_score), 1),
+            'completion_rate': round(float(completion_rate))
+        }
+
+        # Hole die Reviews
+        reviews = session.query(Review).filter_by(movie_id=movie_id).order_by(Review.created_at.desc()).all()
+
+        # Hole ähnliche Filme basierend auf Genre und Jahr
+        similar_movies = session.query(Movie).filter(
+            Movie.id != movie_id,
+            Movie.genre.like(f'%{movie.genre}%'),
+            Movie.release_year.between(movie.release_year - 5, movie.release_year + 5)
+        ).order_by(Movie.rating.desc()).limit(4).all()
+
+        # Hole KI-Empfehlungen basierend auf dem aktuellen Film
+        try:
+            # Erstelle einen String mit den Filminformationen
+            movie_info = f"Title: {movie.title}, Genre: {movie.genre}, Year: {movie.release_year}, Rating: {movie.rating}"
+            # Hole Empfehlungen von der KI
+            ai_recommendation = ai_client.ai_request(movie_info)
+            if ai_recommendation and 'movie' in ai_recommendation:
+                movie_data = ai_recommendation['movie']
+                # Prüfe ob der empfohlene Film bereits in der Datenbank ist
+                ai_movie = session.query(Movie).filter(Movie.title.ilike(movie_data['title'])).first()
+                if not ai_movie:
+                    # Füge den Film zur Datenbank hinzu
+                    ai_movie = Movie(
+                        title=movie_data['title'],
+                        release_year=int(movie_data['year']) if movie_data.get('year') else None,
+                        director=movie_data.get('director'),
+                        genre=movie_data.get('genre'),
+                        description=movie_data.get('plot'),
+                        poster_url=movie_data.get('poster'),
+                        rating=float(movie_data.get('imdb', 0)),
+                        country=movie_data.get('country')
+                    )
+                    session.add(ai_movie)
+                    session.commit()
+                ai_recommendations = [{'movie': ai_movie, 'reason': ai_recommendation.get('reason', 'KI-Empfehlung')}]
+            else:
+                ai_recommendations = []
+        except Exception as e:
+            app.logger.error(f"Fehler bei KI-Empfehlung: {str(e)}")
+            ai_recommendations = []
+
+        # Füge Quiz-Historie für den aktuellen Benutzer hinzu
+        quiz_history = None
+        if current_user.is_authenticated:
+            quiz_history = session.query(QuizAttempt).filter_by(
+                user_id=current_user.id,
+                movie_id=movie_id
+            ).order_by(QuizAttempt.created_at.desc()).limit(5).all()
+
+            quiz_history = [{
+                'date': attempt.created_at.strftime('%d.%m.%Y'),
+                'score': attempt.score,
+                'progress': (attempt.score / 10 * 100)  # Standardisiere auf 10 Punkte
+            } for attempt in quiz_history]
+
+        return render_template('movie_details.html',
+                            movie=movie,
+                            reviews=reviews,
+                            stats=stats,
+                            quiz_history=quiz_history,
+                            similar_movies=similar_movies,
+                            ai_recommendations=ai_recommendations)
+
 
 # delete user movie from database
 @app.route('/users/<user_id>/delete/<movie_id>', methods=["GET", "POST"])
@@ -327,401 +468,487 @@ def delete_user_movie(user_id, movie_id):
 # movie recommendation from AI
 @app.route('/users/<user_id>/recommend_movie', methods=["GET", "POST"])
 def recommendation(user_id):
-    if request.method == "GET":
-        chosen = data_manager.get_user(user_id)
-        return render_template("recommend.html", user=chosen)
-    elif request.method == "POST":
-        chosen = data_manager.get_user(user_id)
-        data_string = ""
-        for movie in data_manager.get_user_movies(user_id):
-            data_string += f"Title: {movie['name']} User Rating: {movie['user_rating']},"
+    """Filmempfehlungen für einen bestimmten Nutzer."""
+    with data_manager.SessionFactory() as session:
+        # Benutze session.get statt query().get()
+        chosen = session.get(User, user_id)
+        if not chosen:
+            return render_template('404.html'), 404
 
-        if "name" in request.form:
-            # Wenn ein Film ausgeschlossen werden soll
-            excluded_movie = request.form["name"]
-            recommendation = ai_client.ai_excluded_movie_request(data_string, excluded_movie)
-        else:
-            # Normale Empfehlung ohne Ausschluss
-            recommendation = ai_client.ai_request(data_string)
+        if request.method == "POST":
+            try:
+                # Hole die bewerteten Filme des Nutzers
+                user_movies = session.query(UserMovie).filter_by(user_id=user_id).all()
+                data_string = ""
+                for um in user_movies:
+                    movie = session.get(Movie, um.movie_id)
+                    if movie:
+                        data_string += f"Title: {movie.title}, Rating: {um.rating}, "
 
-        if recommendation:
-            movie = data_manager.set_movie(recommendation["movie"]["title"])
-            if movie:
-                data_manager.set_user_movies(user_id, movie.id)
-                return render_template("recommend.html", user=chosen,
-                                    recommendation=recommendation["movie"],
-                                    reasoning=recommendation["reasoning"])
+                # Optional: Film ausschließen
+                excluded_movie = request.form.get('name')
 
-        # Wenn keine Empfehlung gefunden wurde oder der Film nicht hinzugefügt werden konnte
-        return render_template("recommend.html", user=chosen, error="Keine passende Filmempfehlung gefunden")
+                if excluded_movie:
+                    recommendation = ai_client.ai_excluded_movie_request(data_string, excluded_movie)
+                else:
+                    recommendation = ai_client.ai_request(data_string)
 
+                if recommendation and 'movie' in recommendation:
+                    movie_data = recommendation['movie']
+                    # Prüfe ob der Film bereits in der Datenbank ist
+                    movie = session.query(Movie).filter_by(title=movie_data['title']).first()
 
-# API Route für Film-Empfehlungen
-@app.route('/api/recommendations/<movie_id>', methods=['GET'])
-def get_movie_recommendations(movie_id):
-    try:
-        # Hole den Film aus der Datenbank
-        movie = data_manager.get_movie(movie_id)
-        if not movie:
-            return jsonify({'error': 'Film nicht gefunden'}), 404
+                    if not movie:
+                        # Füge den Film zur Datenbank hinzu
+                        movie = Movie(
+                            title=movie_data['title'],
+                            release_year=int(movie_data['year']) if movie_data.get('year') else None,
+                            director=movie_data.get('director'),
+                            genre=movie_data.get('genre'),
+                            description=movie_data.get('plot'),
+                            poster_url=movie_data.get('poster'),
+                            rating=float(movie_data.get('imdb', 0)),
+                            country=movie_data.get('country')
+                        )
+                        session.add(movie)
+                        session.commit()
 
-        # Erstelle einen String mit den Film-Daten für die AI
-        data_string = f"Title: {movie.name}, Genre: {movie.genre}, Year: {movie.year}, Rating: {movie.rating},"
-        
-        # Hole eine Empfehlung von der AI
-        recommendation = AIRequest().ai_excluded_movie_request(data_string, movie.name)
-        
-        # Hole zusätzliche Informationen (Poster und IMDB-Rating) für den empfohlenen Film
-        poster = OMDBClient().get_movie(recommendation["movie"]["title"])
-        recommendation["movie"]["poster"] = poster["poster"]
-        recommendation["movie"]["imdb"] = poster["rating"]
-        
-        # Sende die Empfehlung als JSON zurück
-        return jsonify(recommendation)
-    except Exception as e:
-        # Bei einem Fehler sende eine Fehlermeldung zurück
-        return jsonify({'error': str(e)}), 500
+                    # Stelle sicher, dass wir ein Movie-Objekt zurückgeben
+                    return render_template('movie_recommend.html',
+                                        recommendation=movie,
+                                        reason=recommendation.get('reason', 'Basierend auf deinen Bewertungen'),
+                                        user=chosen)
 
+                # Wenn keine Empfehlung gefunden wurde
+                flash('Leider konnte keine passende Empfehlung generiert werden.', 'warning')
+                return render_template('movie_recommend.html',
+                                    recommendation=None,
+                                    user=chosen)
+
+            except Exception as e:
+                print(f"Fehler bei der Filmempfehlung: {str(e)}")
+                flash('Bei der Generierung der Empfehlung ist ein Fehler aufgetreten.', 'error')
+                return render_template('movie_recommend.html',
+                                    recommendation=None,
+                                    user=chosen)
+
+        # GET-Anfrage
+        return render_template('movie_recommend.html',
+                            recommendation=None,
+                            user=chosen)
 
 # Quiz Routes
 @app.route('/quiz')
 def quiz_home():
-    """Zeigt die Quiz-Übersichtsseite mit verfügbaren Quizzen."""
+    """Zeigt die Quiz-Startseite mit verfügbaren Quizzen."""
     with data_manager.SessionFactory() as session:
-        quiz_service = QuizService(session)
-        available_quizzes = quiz_service.get_available_quizzes()
-        recent_highscores = quiz_service.get_recent_highscores(limit=5)
+        # Hole die letzten 6 Filme für Quizze
+        recent_movies = session.query(Movie).order_by(Movie.id.desc()).limit(6).all()
+
+        # Wenn Benutzer eingeloggt ist, hole seine Quiz-Statistiken
         user_stats = None
         if current_user.is_authenticated:
-            user_stats = quiz_service.get_user_quiz_stats(current_user.id)
+            total_attempts = session.query(QuizAttempt).filter_by(user_id=current_user.id).count()
+            if total_attempts > 0:
+                avg_score = session.query(func.avg(QuizAttempt.score)).filter_by(
+                    user_id=current_user.id
+                ).scalar() or 0
+                best_score = session.query(func.max(QuizAttempt.score)).filter_by(
+                    user_id=current_user.id
+                ).scalar() or 0
+            else:
+                avg_score = 0
+                best_score = 0
 
-    return render_template(
-        "quiz_home.html",
-        quizzes=available_quizzes,
-        highscores=recent_highscores,
-        user_stats=user_stats
-    )
+            user_stats = {
+                'total_attempts': total_attempts,
+                'avg_score': round(float(avg_score), 1),
+                'best_score': best_score
+            }
 
-@app.route('/movies/<movie_id>/quiz', methods=['GET'])
+        return render_template('quiz_home.html',
+                            movies=recent_movies,
+                            user_stats=user_stats)
+
+@app.route('/quiz/<movie_id>')
 def movie_quiz(movie_id):
-    """Zeigt ein Quiz für einen bestimmten Film an."""
+    """Startet ein Quiz für einen bestimmten Film."""
     with data_manager.SessionFactory() as session:
         movie = session.get(Movie, movie_id)
         if not movie:
-            return render_template("404.html"), 404
+            flash('Film nicht gefunden.', 'error')
+            return redirect(url_for('quiz_home'))
 
-        quiz_service = QuizService(session)
-        if current_user.is_authenticated:
-            quiz_service.current_user = current_user
-        questions = quiz_service.get_movie_questions(movie_id)
+        quiz_service = QuizService(data_manager)
+        questions = quiz_service.get_questions_for_movie(movie_id)
+
         if not questions:
-            questions = quiz_service.generate_questions(movie_id)
+            flash('Keine Fragen für diesen Film verfügbar.', 'warning')
+            return redirect(url_for('quiz_home'))
 
-        highscores = quiz_service.get_highscores(movie_id)
-        user_achievements = []
-        if current_user.is_authenticated:
-            user_achievements = quiz_service.get_user_achievements(current_user.id)
+        return render_template('quiz.html',
+                            movie=movie,
+                            questions=questions)
 
-        return render_template(
-            "quiz.html",
-            movie=movie,
-            questions=questions,
-            highscores=highscores,
-            achievements=user_achievements
-        )
-
-@app.route('/movies/<movie_id>/quiz/submit', methods=['POST'])
+@app.route('/quiz/<movie_id>/submit', methods=['POST'])
 @login_required
 def submit_quiz(movie_id):
-    """Verarbeitet die Antworten eines Quiz-Versuchs."""
-    if not request.is_json:
-        return jsonify({"error": "Content-Type muss application/json sein"}), 400
-
-    data = request.get_json()
-    user_id = current_user.id
-    answers = data.get('answers', {})
-    score = data.get('score', 0)
+    """Verarbeitet die Quiz-Antworten und zeigt das Ergebnis."""
+    answers = request.form
+    difficulty = request.form.get('difficulty', 'mittel')  # Standard: mittel
+    quiz_service = QuizService(data_manager)
+    score = quiz_service.calculate_score(movie_id, answers, difficulty)
 
     with data_manager.SessionFactory() as session:
-        quiz_service = QuizService(session)
-        attempt, earned_achievements = quiz_service.submit_quiz_attempt(
-            user_id=user_id,
+        # Speichere den Quizversuch
+        quiz_attempt = QuizAttempt(
+            user_id=current_user.id,
             movie_id=movie_id,
-            answers=answers,
-            score=score
+            score=score,
+            difficulty=difficulty,
+            created_at=datetime.utcnow()
         )
+        session.add(quiz_attempt)
+        session.commit()
 
-        # Formatiere die Achievements für die JSON-Antwort
-        achievement_data = [{
-            'title': a.title,
-            'description': a.description,
-            'icon_url': a.icon_url
-        } for a in earned_achievements]
+        # Prüfe auf Achievements
+        achievement_service = AchievementService(session)
+        new_achievements = achievement_service.check_quiz_achievements(current_user.id, score, difficulty)
 
-        return jsonify({
-            'success': True,
-            'score': attempt.score,
-            'correct_count': attempt.correct_count,
-            'earned_achievements': achievement_data
-        })
+        achievements_data = []
+        if new_achievements:
+            for achievement in new_achievements:
+                achievements_data.append({
+                    'title': achievement.title,
+                    'description': achievement.description
+                })
+                flash(f'Neues Achievement freigeschaltet: {achievement.title}!', 'success')
 
-@app.route('/movies/<movie_id>/quiz/suggest', methods=['GET', 'POST'])
-def suggest_question(movie_id):
-    """Erlaubt Benutzern, eigene Quiz-Fragen vorzuschlagen."""
-    movie = data_manager.get_movie(movie_id)
-    if not movie:
-        return render_template("404.html"), 404
+    return jsonify({
+        'score': score,
+        'achievements': achievements_data
+    })
 
+@app.route('/quiz/suggest', methods=['GET', 'POST'])
+@login_required
+def suggest_question():
+    """Ermöglicht Benutzern, neue Quizfragen vorzuschlagen."""
     if request.method == 'POST':
-        data = request.form.to_dict()
-        user_id = data.get('user_id')
+        movie_id = request.form.get('movie_id')
+        question_text = request.form.get('question')
+        correct_answer = request.form.get('correct_answer')
+        wrong_answers = [
+            request.form.get('wrong_answer1'),
+            request.form.get('wrong_answer2'),
+            request.form.get('wrong_answer3')
+        ]
 
-        # Validiere die vorgeschlagene Frage mit KI
-        validation = AIRequest().validate_user_question(data)
+        if not all([movie_id, question_text, correct_answer] + wrong_answers):
+            flash('Bitte fülle alle Felder aus.', 'error')
+            return redirect(url_for('suggest_question'))
 
-        if validation['is_valid']:
-            with data_manager.SessionFactory() as session:
-                question = SuggestedQuestion(
-                    user_id=user_id,
-                    movie_id=movie_id,
-                    question_text=data['question_text'],
-                    correct_answer=data['correct_answer'],
-                    wrong_answer_1=data['wrong_answer_1'],
-                    wrong_answer_2=data['wrong_answer_2'],
-                    wrong_answer_3=data['wrong_answer_3']
-                )
-                session.add(question)
-                session.commit()
-
-            return render_template(
-                "suggest_question.html",
-                movie=movie,
-                success=True,
-                message="Danke für deinen Vorschlag!"
+        with data_manager.SessionFactory() as session:
+            suggestion = SuggestedQuestion(
+                user_id=current_user.id,
+                movie_id=movie_id,
+                question_text=question_text,
+                correct_answer=correct_answer,
+                wrong_answer_1=wrong_answers[0],
+                wrong_answer_2=wrong_answers[1],
+                wrong_answer_3=wrong_answers[2],
+                status='pending'
             )
-        else:
-            return render_template(
-                "suggest_question.html",
-                movie=movie,
-                error=True,
-                feedback=validation['feedback']
-            )
+            session.add(suggestion)
+            session.commit()
 
-    return render_template("suggest_question.html", movie=movie)
+            flash('Vielen Dank für deinen Vorschlag! Er wird überprüft.', 'success')
+            return redirect(url_for('quiz_home'))
+
+    with data_manager.SessionFactory() as session:
+        movies = session.query(Movie).order_by(Movie.title).all()
+        return render_template('suggest_question.html', movies=movies)
 
 # Auth Routes
-@app.route('/auth/login', methods=['GET', 'POST'])
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated:
-        return redirect(url_for('home'))
-
     if request.method == 'POST':
         email = request.form.get('email')
         password = request.form.get('password')
+        remember = bool(request.form.get('remember'))
 
-        with data_manager.SessionFactory() as session:
-            auth_service = AuthService(session)
+        if not email or not password:
+            flash('Bitte geben Sie E-Mail und Passwort ein.', 'error')
+            return render_template('auth/login.html')
+
+        try:
             user = auth_service.authenticate_user(email, password)
-
             if user:
-                login_user(user)
+                login_user(user, remember=remember)
                 next_page = request.args.get('next')
+                flash('Erfolgreich angemeldet!', 'success')
                 return redirect(next_page or url_for('home'))
             else:
-                flash('Ungültige Email oder Passwort', 'error')
+                app.logger.warning(f'Fehlgeschlagener Login-Versuch für E-Mail: {email}')
+                flash('Ungültige E-Mail oder Passwort.', 'error')
+        except Exception as e:
+            app.logger.error(f'Fehler beim Login: {str(e)}')
+            flash('Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.', 'error')
 
     return render_template('auth/login.html')
 
-@app.route('/auth/register', methods=['GET', 'POST'])
+@app.route('/register', methods=['GET', 'POST'])
 def register():
-    if current_user.is_authenticated:
-        return redirect(url_for('home'))
-
     if request.method == 'POST':
         username = request.form.get('username')
         email = request.form.get('email')
         password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
 
-        with data_manager.SessionFactory() as session:
-            auth_service = AuthService(session)
+        # Validiere die Eingaben
+        if not all([username, email, password, confirm_password]):
+            flash('Bitte fülle alle Felder aus.', 'error')
+            return render_template('auth/register.html')
+
+        if password != confirm_password:
+            flash('Passwörter stimmen nicht überein.', 'error')
+            return render_template('auth/register.html')
+
+        try:
             user = auth_service.register_user(username, email, password)
-
             if user:
                 login_user(user)
+                flash('Registrierung erfolgreich!', 'success')
                 return redirect(url_for('home'))
             else:
-                flash('Registrierung fehlgeschlagen. Email oder Benutzername bereits vergeben.', 'error')
+                flash('Benutzername oder E-Mail bereits vergeben.', 'error')
+                return render_template('auth/register.html')
+        except Exception as e:
+            flash(f'Fehler bei der Registrierung: {str(e)}', 'error')
+            return render_template('auth/register.html')
 
     return render_template('auth/register.html')
 
-@app.route('/auth/logout')
+@app.route('/logout')
 @login_required
 def logout():
     logout_user()
     return redirect(url_for('home'))
 
-# Geschützte Routen with @login_required
+# Profile Routes
 @app.route('/profile')
 @login_required
 def profile():
-    """Zeigt die Profilseite des eingeloggten Benutzers an."""
     with data_manager.SessionFactory() as session:
-        # Binde den aktuellen Benutzer an die Session und lade alle Beziehungen
-        user = session.merge(current_user)
-        session.refresh(user)  # Aktualisiere den User-Objekt mit allen Beziehungen
+        user = session.get(User, current_user.id, options=[
+            joinedload(User.reviews),
+            joinedload(User.watchlist_items),
+            joinedload(User.quiz_attempts),
+            joinedload(User.achievements)
+        ])
 
-        # Lade die Statistiken mit expliziten Abfragen
-        achievements = session.query(UserAchievement).filter_by(user_id=user.id).all()
+        # Berechne Benutzerstatistiken
+        if not user:
+            flash('Benutzer nicht gefunden.', 'error')
+            return redirect(url_for('home'))
+
+        # Hole die Anzahl der Reviews, Watchlist-Items, Quiz-Versuche und Achievements
+        if not user.reviews:
+            user.reviews = []
+
+        if not user.watchlist_items:
+            user.watchlist_items = []
+
+        if not user.quiz_attempts:
+            user.quiz_attempts = []
+
+        if not user.achievements:
+            user.achievements = []
+
+        # Berechne die Statistiken
+        with data_manager.SessionFactory() as session:
+            # Hole die durchschnittliche Bewertung für den Benutzer
+            from sqlalchemy import func
+            user.reviews_count = len(user.reviews)
+            user.watchlist_count = len(user.watchlist_items)
+            user.quiz_attempts_count = len(user.quiz_attempts)
+            user.achievements_count = len(user.achievements)
         user_stats = {
-            'reviews_count': session.query(Review).filter_by(user_id=user.id).count(),
-            'watchlist_count': session.query(WatchlistItem).filter_by(user_id=user.id).count(),
-            'quiz_attempts_count': session.query(QuizAttempt).filter_by(user_id=user.id).count(),
-            'achievements': achievements,
-            'achievements_count': len(achievements)
+            'reviews_count': len(user.reviews),
+            'watchlist_count': len(user.watchlist_items),
+            'quiz_attempts': len(user.quiz_attempts),
+            'achievements_count': len(user.achievements),
+            'avg_rating': session.query(func.avg(Review.rating)).filter_by(user_id=user.id).scalar() or 0
         }
 
         return render_template('profile.html',
                             user=user,
-                            user_stats=user_stats,
-                            password_error=request.args.get('password_error'),
-                            password_success=request.args.get('password_success'))
-
-@app.route('/profile/password', methods=['POST'])
+                            user_stats=user_stats,  # Füge user_stats zum Template-Kontext hinzu
+                            stats=stats if 'stats' in locals() else None)  # Optional: behalte stats für Abwärtskompatibilität
+@app.route('/profile/settings', methods=['POST'])
 @login_required
-def change_password():
-    try:
-        current_password = request.form.get('current_password')
-        new_password = request.form.get('new_password')
-        confirm_password = request.form.get('confirm_password')
-
-        if not all([current_password, new_password, confirm_password]):
-            flash('Bitte füllen Sie alle Passwortfelder aus.', 'error')
-            return redirect(url_for('profile'))
-
-        if new_password != confirm_password:
-            flash('Die Passwörter stimmen nicht überein.', 'error')
-            return redirect(url_for('profile'))
-
-        with data_manager.SessionFactory() as session:
-            auth_service = AuthService(session)
-            if auth_service.change_password(current_user.id, current_password, new_password):
-                flash('Passwort wurde erfolgreich geändert.', 'success')
-            else:
-                flash('Das aktuelle Passwort ist nicht korrekt.', 'error')
-
-        return redirect(url_for('profile'))
-    except Exception as e:
-        app.logger.error(f"Fehler beim Ändern des Passworts: {str(e)}")
-        flash('Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.', 'error')
-        return redirect(url_for('profile'))
-
-@app.route('/profile/preferences', methods=['POST'])
-@login_required
-def update_preferences():
-    email_notifications = request.form.get('email_notifications') == 'on'
+def update_settings():
     theme = request.form.get('theme', 'system')
+    notifications = request.form.get('notifications') == 'on'
 
     with data_manager.SessionFactory() as session:
         user = session.get(User, current_user.id)
         if user:
-            user.email_notifications = email_notifications
             user.theme = theme
+            user.email_notifications = notifications
             session.commit()
-            flash('Einstellungen wurden gespeichert.', 'success')
-        else:
-            flash('Benutzer nicht gefunden.', 'error')
+            flash('Einstellungen wurden aktualisiert.', 'success')
 
     return redirect(url_for('profile'))
 
 # Watchlist Routes
-@app.route('/watchlist', methods=['GET'])
-@login_required
-def view_watchlist():
-    """Zeigt die Watchlist des eingeloggten Benutzers an."""
-    with data_manager.SessionFactory() as session:
-        watchlist_service = WatchlistService(session)
-        watchlist = watchlist_service.get_watchlist(current_user.id)
-    return render_template('watchlist.html', watchlist=watchlist)
-
 @app.route('/watchlist/add/<int:movie_id>', methods=['POST'])
 @login_required
 def add_to_watchlist(movie_id):
     """Fügt einen Film zur Watchlist hinzu."""
-    with data_manager.SessionFactory() as session:
-        watchlist_service = WatchlistService(session)
+    try:
         item = watchlist_service.add_to_watchlist(current_user.id, movie_id)
-        if item:
-            flash('Film wurde zur Watchlist hinzugefügt!', 'success')
+        # Film wurde erfolgreich hinzugefügt oder war bereits in der Watchlist
+        if not item:
+            flash('Film ist bereits in deiner Watchlist.', 'info')
         else:
-            flash('Film ist bereits in deiner Watchlist!', 'error')
-    return redirect(request.referrer or url_for('view_watchlist'))
+            flash('Film wurde zur Watchlist hinzugefügt.', 'success')
+    except Exception as e:
+        # Nur für echte Fehler eine Fehlermeldung anzeigen
+        app.logger.error(f"Watchlist-Fehler: {str(e)}")
+        flash(str(e), 'error')
+
+    # Zurück zur vorherigen Seite oder zur Watchlist
+    return redirect(request.referrer or url_for('watchlist'))
+
+@app.route('/watchlist', methods=['GET'])
+@login_required
+def watchlist():
+    """Zeigt die Watchlist des eingeloggten Benutzers."""
+    try:
+        items = watchlist_service.get_watchlist(current_user.id)
+        return render_template('watchlist.html', watchlist=items)
+    except Exception as e:
+        flash('Fehler beim Laden der Watchlist.', 'error')
+        app.logger.error(f"Watchlist-Fehler: {str(e)}")
+        return redirect(url_for('home'))
 
 @app.route('/watchlist/remove/<int:movie_id>', methods=['POST'])
 @login_required
 def remove_from_watchlist(movie_id):
-    """Entfernt einen Film aus der Watchlist."""
-    with data_manager.SessionFactory() as session:
-        watchlist_service = WatchlistService(session)
+    """Entfernt einen Film von der Watchlist."""
+    try:
         if watchlist_service.remove_from_watchlist(current_user.id, movie_id):
-            flash('Film wurde aus der Watchlist entfernt!', 'success')
+            flash('Film wurde von der Watchlist entfernt.', 'success')
         else:
-            flash('Film konnte nicht gefunden werden!', 'error')
-    return redirect(url_for('view_watchlist'))
+            flash('Film konnte nicht gefunden werden.', 'error')
+    except Exception as e:
+        flash('Fehler beim Entfernen von der Watchlist.', 'error')
+        app.logger.error(f"Watchlist-Fehler: {str(e)}")
+
+    return redirect(request.referrer or url_for('watchlist'))
 
 # Achievement Routes
 @app.route('/achievements')
 @login_required
-def view_achievements():
-    """Zeigt die Achievements des eingeloggten Benutzers an."""
+def achievements():
+    """Zeigt die Achievements des eingeloggten Benutzers."""
     with data_manager.SessionFactory() as session:
-        achievement_service = AchievementService(session)
-        user_achievements = achievement_service.get_user_achievements(current_user.id)
-        all_achievements = achievement_service.get_available_achievements()
-    return render_template(
-        'achievements.html',
-        user_achievements=user_achievements,
-        all_achievements=all_achievements
-    )
+        user = session.get(User, current_user.id, options=[
+            joinedload(User.achievements)
+        ])
 
+        # Hole alle verfügbaren Achievements
+        all_achievements = session.query(Achievement).all()
+        unlocked_ids = {a.id for a in user.achievements}
+        locked_achievements = [a for a in all_achievements if a.id not in unlocked_ids]
 
-# Automatische Film-Updates
-@app.route('/admin/update-movies', methods=['POST'])
-@login_required
-def update_movies():
-    """Aktualisiert die Filmdatenbank mit neuen Filmen"""
-    movie_service = MovieUpdateService(data_manager)
+        return render_template('achievements.html',
+                           unlocked=user.achievements,
+                           locked=locked_achievements)
+
+@app.route('/movies/<int:movie_id>/recommendation/generate', methods=['POST'])
+def generate_ai_recommendation(movie_id):
+    """Generiert eine KI-Empfehlung für einen bestimmten Film"""
     try:
-        movies_added = movie_service.update_movie_database()
-        return jsonify({
-            'success': True,
-            'message': f'{movies_added} neue Filme wurden hinzugefügt'
-        })
+        with data_manager.SessionFactory() as session:
+            movie = session.get(Movie, movie_id)
+            if not movie:
+                return jsonify({'error': 'Film nicht gefunden'}), 404
+
+            # Erstelle einen detaillierten Kontext für die KI
+            context = f"{movie.title}"
+
+            # Hole die Filminformationen und Bewertungen zur Verbesserung der Empfehlung
+            movie_details = {
+                'title': movie.title,
+                'director': movie.director,
+                'genre': movie.genre,
+                'year': movie.release_year,
+                'plot': movie.description
+            }
+
+            # Hole Empfehlung von der KI mit verbessertem Kontext
+            ai_response = ai_client.ai_request(context)
+
+            if ai_response and 'movie' in ai_response:
+                return jsonify({
+                    'recommendation': {
+                        'movie': {
+                            'title': ai_response['movie']['title'],
+                            'director': ai_response['movie']['director'],
+                            'year': ai_response['movie']['year'],
+                            'poster': ai_response['movie']['poster'],
+                            'genre': ai_response['movie']['genre'],
+                            'plot': ai_response['movie']['plot']
+                        },
+                        'reasoning': ai_response['reasoning']
+                    }
+                })
+            else:
+                return jsonify({'error': 'Keine Empfehlung verfügbar'}), 404
+
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'message': f'Fehler beim Aktualisieren: {str(e)}'
-        }), 500
+        print(f"Fehler bei der KI-Empfehlung: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
-# Plane tägliche Updates
-def schedule_movie_updates():
-    """Führt tägliche Film-Updates durch"""
-    with app.app_context():
-        movie_service = MovieUpdateService(data_manager)
-        movie_service.update_movie_database()
+@app.route('/movies/<int:movie_id>/similar', methods=['GET'])
+def get_similar_movies(movie_id):
+    """Gibt ähnliche Filme zurück"""
+    with data_manager.SessionFactory() as session:
+        movie = session.get(Movie, movie_id)
+        if not movie:
+            return jsonify({'error': 'Film nicht gefunden'}), 404
 
-if __name__ == '__main__':
-    # Erstelle einen Hintergrund-Thread für Updates
-    import threading
-    import time
+        # Hole ähnliche Filme basierend auf Genre und Jahr
+        similar_movies = session.query(Movie).filter(
+            Movie.id != movie_id,
+            Movie.genre.like(f'%{movie.genre}%'),
+            Movie.release_year.between(movie.release_year - 5, movie.release_year + 5)
+        ).order_by(Movie.rating.desc()).limit(4).all()
 
-    def run_scheduled_updates():
-        while True:
-            schedule_movie_updates()
-            # Warte 24 Stunden bis zum nächsten Update
-            time.sleep(24 * 60 * 60)
+        # Konvertiere die Filme in ein JSON-Format
+        similar_movies_data = [{
+            'id': m.id,
+            'title': m.title,
+            'genre': m.genre,
+            'release_year': m.release_year,
+            'rating': m.rating,
+            'poster_url': m.poster_url
+        } for m in similar_movies]
 
-    update_thread = threading.Thread(target=run_scheduled_updates)
-    update_thread.daemon = True
-    update_thread.start()
+        return jsonify({'similar_movies': similar_movies_data})
 
+@app.route('/movies/<int:movie_id>/recommendation', methods=['GET'])
+def get_movie_recommendation(movie_id):
+    """Gibt eine vorhandene KI-Empfehlung zurück"""
+    with data_manager.SessionFactory() as session:
+        movie = session.get(Movie, movie_id)
+        if not movie:
+            return jsonify({'error': 'Film nicht gefunden'}), 404
+
+        # Hier könnte man gespeicherte KI-Empfehlungen abrufen
+        # Für jetzt geben wir einfach einen leeren Response zurück
+        return jsonify({'recommendation': None})
+
+if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5002, debug=True)

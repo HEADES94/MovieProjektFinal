@@ -3,113 +3,50 @@ movie_api.py - OMDB API Client für MovieProjekt
 """
 import os
 import requests
-from typing import Optional, Dict, List
-import dotenv
+from typing import Optional, Dict
+from dotenv import load_dotenv
 
 # Lade Umgebungsvariablen
-dotenv.load_dotenv()
+load_dotenv()
 
-API_KEY = os.getenv("OMDB_API_KEY")
+OMDB_API_KEY = os.getenv("OMDB_API_KEY")
 BASE_URL = "http://www.omdbapi.com/"
 
 class OMDBClient:
     """
-    Client für die OMDB API, um Filmdaten anhand des Titels abzurufen.
+    Client für die OMDB API
     """
     def __init__(self):
-        self.api_key = API_KEY
+        self.api_key = OMDB_API_KEY
 
-    def search_movies(self, search_term: str) -> List[Dict]:
+    def get_movie(self, title: str, year: str = None) -> Optional[Dict]:
         """
-        Suche nach Filmen mit einem Suchbegriff.
-        Args:
-            search_term (str): Der Suchbegriff
-        Returns:
-            list: Liste von gefundenen Filmen
+        Hole Filmdaten von der OMDB API
         """
         try:
             params = {
-                'apikey': self.api_key,
-                's': search_term,
-                'type': 'movie'
+                "apikey": self.api_key,
+                "t": title,
+                "y": year,
+                "plot": "full"
             }
 
-            response = requests.get(BASE_URL, params=params, timeout=10)
-            response.raise_for_status()
-
+            response = requests.get(BASE_URL, params=params)
             data = response.json()
-            if data.get("Response") == "True" and "Search" in data:
-                return data["Search"]
-            return []
 
-        except Exception as e:
-            print(f"Fehler bei der Filmsuche: {str(e)}")
-            return []
-
-    def get_movie(self, title: str) -> Optional[Dict]:
-        """
-        Hole Filmdaten von der OMDB API anhand des Titels.
-        Versucht zuerst eine exakte Suche, dann eine Ähnlichkeitssuche.
-        Args:
-            title (str): Der Titel des Films.
-        Returns:
-            dict: Filmdaten oder None, falls kein Film gefunden wurde.
-        """
-        try:
-            # Erst versuchen mit exaktem Titel
-            params = {
-                'apikey': self.api_key,
-                't': title,
-                'type': 'movie',
-                'plot': 'full'
-            }
-
-            response = requests.get(BASE_URL, params=params, timeout=10)
-            response.raise_for_status()
-
-            data = response.json()
             if data.get("Response") == "True":
                 return {
                     "name": data.get("Title", ""),
-                    "director": data.get("Director", "N/A"),
+                    "director": data.get("Director", ""),
                     "year": data.get("Year", ""),
                     "poster": data.get("Poster", ""),
-                    "country": data.get("Country", "N/A"),
-                    "genre": data.get("Genre", "N/A"),
-                    "plot": data.get("Plot", "N/A"),
-                    "rating": data.get("imdbRating", "N/A")
+                    "rating": data.get("imdbRating", "N/A"),
+                    "genre": data.get("Genre", ""),
+                    "country": data.get("Country", ""),
+                    "plot": data.get("Plot", "")
                 }
-
-            # Wenn nicht gefunden, versuche Suche
-            search_results = self.search_movies(title)
-            if search_results:
-                # Hole Details des ersten Suchergebnisses
-                movie_id = search_results[0]['imdbID']
-                params['i'] = movie_id
-                del params['t']
-
-                response = requests.get(BASE_URL, params=params, timeout=10)
-                response.raise_for_status()
-
-                data = response.json()
-                if data.get("Response") == "True":
-                    return {
-                        "name": data.get("Title", ""),
-                        "director": data.get("Director", "N/A"),
-                        "year": data.get("Year", ""),
-                        "poster": data.get("Poster", ""),
-                        "country": data.get("Country", "N/A"),
-                        "genre": data.get("Genre", "N/A"),
-                        "plot": data.get("Plot", "N/A"),
-                        "rating": data.get("imdbRating", "N/A")
-                    }
-
-            print(f"Film nicht gefunden: {title}")
             return None
 
-        except requests.RequestException as e:
-            print(f"Fehler bei der OMDB-API-Anfrage für {title}: {str(e)}")
-            return None
         except Exception as e:
-            print(f"Unerwarteter Fehler bei der Filmsuche für {title}: {str(e)}")
+            print(f"Fehler beim Abrufen der Filmdaten: {str(e)}")
             return None

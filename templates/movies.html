@@ -10,14 +10,88 @@
             <a href="{{ url_for('new_movie') }}" class="btn btn-primary">
                 ➕ Neuen Film hinzufügen
             </a>
+            {% if current_user.is_authenticated %}
+            <a href="{{ url_for('recommendation', user_id=current_user.id) }}" class="btn btn-secondary">
+                🎯 Persönliche Empfehlungen
+            </a>
+            {% endif %}
         </div>
     </div>
+
+    <div class="search-sort-container glass-card">
+        <div class="search-box">
+            <form method="GET" action="{{ url_for('list_movies') }}" class="search-form">
+                <input type="text" name="search" placeholder="Film suchen..."
+                       value="{{ request.args.get('search', '') }}" class="search-input">
+                <button type="submit" class="search-button">🔍</button>
+            </form>
+        </div>
+        <div class="sort-options">
+            <form method="GET" action="{{ url_for('list_movies') }}" class="sort-form">
+                {% if request.args.get('search') %}
+                <input type="hidden" name="search" value="{{ request.args.get('search') }}">
+                {% endif %}
+                <select name="sort" class="sort-select" onchange="this.form.submit()">
+                    <option value="rating" {% if sort_by == 'rating' %}selected{% endif %}>Nach Bewertung</option>
+                    <option value="title" {% if sort_by == 'title' %}selected{% endif %}>Nach Titel</option>
+                    <option value="year_desc" {% if sort_by == 'year_desc' %}selected{% endif %}>Neuste Filme</option>
+                    <option value="year_asc" {% if sort_by == 'year_asc' %}selected{% endif %}>Älteste Filme</option>
+                </select>
+            </form>
+        </div>
+    </div>
+
+    {% if current_user.is_authenticated %}
+    <div class="mood-recommendations glass-card">
+        <h2>Wonach ist dir heute?</h2>
+        <form class="mood-form" action="{{ url_for('recommendation', user_id=current_user.id) }}" method="POST">
+            <select name="mood" id="mood" required class="mood-select">
+                <option value="" disabled selected>Wähle deine Stimmung...</option>
+                <option value="action">Action & Spannung</option>
+                <option value="comedy">Komödie & Unterhaltung</option>
+                <option value="drama">Drama & Gefühl</option>
+                <option value="adventure">Abenteuer & Fantasy</option>
+                <option value="mystery">Mystery & Thriller</option>
+            </select>
+            <button type="submit" class="btn-primary">Film finden</button>
+        </form>
+    </div>
+
+    {% if mood_recommendations %}
+    <div class="recommendations-section glass-card fade-in">
+        <h2 class="section-title">Passend zu deiner Stimmung</h2>
+        <div class="recommendations-grid">
+            {% for rec in mood_recommendations %}
+            <div class="recommendation-card">
+                <div class="movie-poster">
+                    <img src="{{ rec.movie.poster_url or url_for('static', filename='default_poster.jpg') }}" alt="{{ rec.movie.title }}">
+                </div>
+                <div class="recommendation-info">
+                    <h3>{{ rec.movie.title }}</h3>
+                    <div class="recommendation-meta">
+                        <span>{{ rec.movie.release_year }}</span>
+                        <span>{{ rec.movie.genre }}</span>
+                    </div>
+                    <p class="recommendation-reason">{{ rec.reasoning }}</p>
+                    <div class="recommendation-actions">
+                        <a href="{{ url_for('movie_details', movie_id=rec.movie.id) }}" class="btn-primary">Details</a>
+                        <form action="{{ url_for('add_to_watchlist', movie_id=rec.movie.id) }}" method="POST" style="display: inline;">
+                            <button type="submit" class="btn-secondary">➕ Watchlist</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
 
     <div class="movie-grid">
         {% for movie in movies %}
         <div class="movie-card fade-in">
             <div class="movie-poster">
-                <img src="{{ movie.poster_url }}" alt="{{ movie.title }}">
+                <img src="{{ movie.poster_url or url_for('static', filename='default_poster.jpg') }}" alt="{{ movie.title }}">
                 <div class="movie-overlay">
                     <div class="movie-actions">
                         {% if current_user.is_authenticated %}
@@ -68,6 +142,8 @@
 {% endif %}
 {% endblock %}
 
+{% block styles %}
+{{ super() }}
 <style>
 .section {
     max-width: 1200px;
@@ -92,6 +168,58 @@
 .section-actions .btn {
     padding: 0.75rem 1.5rem;
     font-size: 1rem;
+}
+
+.search-sort-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    gap: 1rem;
+}
+
+.search-box {
+    flex: 1;
+}
+
+.search-form {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.search-input {
+    flex: 1;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+.search-button {
+    padding: 0.5rem 1rem;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.search-button:hover {
+    background: #0056b3;
+}
+
+.sort-options {
+    min-width: 200px;
+}
+
+.sort-select {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+    background-color: white;
 }
 
 .movie-grid {
@@ -244,9 +372,102 @@
     margin-bottom: 0;
 }
 
+.recommendations-section {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+}
+
+.recommendations-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
+.recommendation-card {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    transition: transform 0.2s;
+}
+
+.recommendation-card:hover {
+    transform: translateY(-2px);
+}
+
+.recommendation-card .movie-poster {
+    width: 120px;
+    flex-shrink: 0;
+}
+
+.recommendation-card .movie-poster img {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.recommendation-info {
+    flex: 1;
+}
+
+.recommendation-info h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.2rem;
+}
+
+.recommendation-meta {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.recommendation-reason {
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+    color: var(--text-secondary);
+}
+
+.recommendation-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.section-actions {
+    display: flex;
+    gap: 1rem;
+}
+
+.mood-recommendations {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    border-radius: 16px;
+    background: var(--card-background);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.mood-form {
+    display: flex;
+    gap: 1rem;
+}
+
+.mood-select {
+    flex: 1;
+    padding: 0.75rem;
+    font-size: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--input-background);
+}
+
 @media (max-width: 768px) {
     .movie-grid {
         grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     }
 }
 </style>
+{% endblock %}

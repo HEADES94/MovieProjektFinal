@@ -12,20 +12,16 @@
     {% if user_stats %}
     <div class="stats-grid">
         <div class="stat-card fade-in">
-            <div class="stat-number">{{ user_stats.total_quizzes }}</div>
+            <div class="stat-number">{{ user_stats.total_attempts }}</div>
             <div class="stat-label">Gespielte Quizze</div>
         </div>
         <div class="stat-card fade-in">
-            <div class="stat-number">{{ user_stats.total_score }}</div>
-            <div class="stat-label">Gesamtpunkte</div>
+            <div class="stat-number">{{ user_stats.best_score }}</div>
+            <div class="stat-label">Bester Score</div>
         </div>
         <div class="stat-card fade-in">
-            <div class="stat-number">{{ "%.1f"|format(user_stats.average_score|float) }}%</div>
+            <div class="stat-number">{{ "%.1f"|format(user_stats.avg_score) }}</div>
             <div class="stat-label">Durchschnitt</div>
-        </div>
-        <div class="stat-card fade-in">
-            <div class="stat-number">{{ user_stats.perfect_scores }}</div>
-            <div class="stat-label">Perfekte Scores</div>
         </div>
     </div>
     {% endif %}
@@ -35,64 +31,107 @@
     </div>
 
     <div class="movie-grid">
-        {% for quiz in quizzes %}
+        {% for movie in movies %}
         <div class="movie-card fade-in">
             <div class="movie-poster">
-                <img src="{{ quiz.movie.poster_url }}" alt="{{ quiz.movie.title }}">
+                {% if movie.poster_url %}
+                    <img src="{{ movie.poster_url }}" alt="{{ movie.title }}">
+                {% else %}
+                    <img src="{{ url_for('static', filename='default_poster.jpg') }}" alt="Kein Poster verfügbar">
+                {% endif %}
             </div>
             <div class="movie-info">
-                <h3 class="movie-title">{{ quiz.movie.title }}</h3>
+                <h3 class="movie-title">{{ movie.title }}</h3>
                 <div class="movie-meta">
-                    <span>{{ quiz.question_count }} Fragen</span>
-                    <div class="movie-rating">
-                        <span class="star">🏆</span>
-                        <span>{{ quiz.highscore }}</span>
-                    </div>
+                    <span>{{ movie.release_year }}</span>
+                    {% if movie.genre %}
+                        <span>{{ movie.genre }}</span>
+                    {% endif %}
                 </div>
-                <a href="{{ url_for('movie_quiz', movie_id=quiz.movie.id) }}" class="quiz-start-btn">
-                    <span class="quiz-icon">🎮</span>
-                    Quiz starten
-                </a>
+                <div class="movie-actions">
+                    <a href="{{ url_for('movie_quiz', movie_id=movie.id) }}" class="btn-primary">Quiz starten</a>
+                </div>
             </div>
         </div>
         {% endfor %}
     </div>
 
-    {% if not quizzes %}
-    <div class="empty-state glass-card fade-in">
-        <div class="empty-state-icon">🎯</div>
-        <h2>Keine Quizze verfügbar</h2>
-        <p>Füge neue Filme hinzu, um Quizze zu generieren!</p>
-        <a href="{{ url_for('new_movie') }}" class="btn btn-primary">Film hinzufügen</a>
-    </div>
-    {% endif %}
-
-    {% if highscores %}
-    <div class="section-header glass-card">
-        <h2 class="section-title">Letzte Highscores</h2>
-    </div>
-
-    <div class="leaderboard">
-        {% for score in highscores %}
-        <div class="leaderboard-item fade-in">
-            <div class="rank {% if loop.index == 1 %}first{% elif loop.index == 2 %}second{% elif loop.index == 3 %}third{% endif %}">
-                {{ loop.index }}
-            </div>
-            <div class="player-info">
-                <div class="player-avatar">{{ score.user.username[:2].upper() }}</div>
-                <div>
-                    <div>{{ score.user.username }}</div>
-                    <div class="movie-title">{{ score.movie.title }}</div>
-                </div>
-            </div>
-            <div class="score">{{ score.best_score }}</div>
-        </div>
-        {% endfor %}
+    {% if current_user.is_authenticated %}
+    <div class="section-actions glass-card">
+        <a href="{{ url_for('suggest_question') }}" class="btn-secondary">
+            Neue Quizfrage vorschlagen
+        </a>
     </div>
     {% endif %}
 </div>
 
 <style>
+.section {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.hero {
+    text-align: center;
+    padding: 3rem;
+    margin-bottom: 2rem;
+}
+
+.hero h1 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    text-align: center;
+    padding: 1.5rem;
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: bold;
+    color: var(--accent-color);
+    margin-bottom: 0.5rem;
+}
+
+.stat-label {
+    color: var(--text-secondary);
+}
+
+.section-header {
+    padding: 1rem 2rem;
+    margin-bottom: 2rem;
+}
+
+.section-title {
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.section-actions {
+    text-align: center;
+    padding: 2rem;
+    margin-top: 2rem;
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 .movie-card {
     border-radius: 16px;
     overflow: hidden;

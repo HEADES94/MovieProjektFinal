@@ -21,8 +21,8 @@
             <a href="{{ url_for('list_users') }}" class="nav-link">Nutzer</a>
             <a href="{{ url_for('quiz_home') }}" class="nav-link">Quiz</a>
             {% if current_user.is_authenticated %}
-                <a href="{{ url_for('view_watchlist') }}" class="nav-link">Watchlist</a>
-                <a href="{{ url_for('view_achievements') }}" class="nav-link">Erfolge</a>
+                <a href="{{ url_for('watchlist') }}" class="nav-link">Watchlist</a>
+                <a href="{{ url_for('achievements') }}" class="nav-link">Erfolge</a>
                 <a href="{{ url_for('profile') }}" class="nav-link">Profil</a>
                 <a href="{{ url_for('logout') }}" class="nav-link">Abmelden</a>
             {% else %}

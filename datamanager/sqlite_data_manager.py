@@ -143,7 +143,7 @@ class SQliteDataManager(DataManagerInterface):
                     rating=float(movie_data["rating"]) if movie_data["rating"] != "N/A" else None,
                     country=movie_data["country"],
                     plot=movie_data["plot"],
-                    description=movie_data["plot"]  # Füge die Beschreibung auch zum description-Feld hinzu
+                    description=movie_data["plot"]
                 )
                 session.add(movie)
                 session.commit()
@@ -214,48 +214,48 @@ class SQliteDataManager(DataManagerInterface):
             {
                 "title": "🎯 Perfect Quiz",
                 "description": "Erreiche die perfekte Punktzahl in einem Quiz!",
-                "icon_url": "/static/img/trophy_perfect.png"
+                "code": "perfect_quiz"
             },
             {
                 "title": "🏆 First Highscore",
                 "description": "Erreiche deinen ersten Highscore!",
-                "icon_url": "/static/img/trophy_first.png"
+                "code": "first_highscore"
             },
             {
                 "title": "👑 Quiz Master",
                 "description": "Erreiche in 5 verschiedenen Quizzen mindestens 400 Punkte!",
-                "icon_url": "/static/img/trophy_master.png"
+                "code": "quiz_master"
             },
             {
                 "title": "🎓 Quiz Profi",
                 "description": "Schließe ein schweres Quiz mit mindestens 1000 Punkten ab!",
-                "icon_url": "/static/img/trophy_expert.png"
+                "code": "quiz_expert"
             },
             {
                 "title": "📚 Wissensdurst",
                 "description": "Beantworte 100 Fragen korrekt!",
-                "icon_url": "/static/img/trophy_knowledge.png"
+                "code": "knowledge_seeker"
             },
             {
                 "title": "🎬 Film Enthusiast",
                 "description": "Schließe Quizze zu 10 verschiedenen Filmen ab!",
-                "icon_url": "/static/img/trophy_movie.png"
+                "code": "movie_enthusiast"
             },
             {
                 "title": "🌟 Perfektionist",
                 "description": "Erreiche 3 perfekte Quizze in Folge!",
-                "icon_url": "/static/img/trophy_perfectionist.png"
+                "code": "perfectionist"
             },
             {
                 "title": "🔥 Streak Master",
                 "description": "Beantworte 20 Fragen in Folge richtig!",
-                "icon_url": "/static/img/trophy_streak.png"
+                "code": "streak_master"
             }
         ]
         with self.SessionFactory() as session:
             for achievement_data in achievements:
                 existing = session.query(Achievement).filter_by(
-                    title=achievement_data["title"]).first()
+                    code=achievement_data["code"]).first()
                 if not existing:
                     achievement = Achievement(**achievement_data)
                     session.add(achievement)

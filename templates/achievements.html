@@ -7,40 +7,47 @@
     <div class="header-section glass-card">
         <h1>Meine Achievements</h1>
         <div class="achievement-stats">
-            <span class="achievement-count">{{ user_achievements|length }} von {{ all_achievements|length }} Errungenschaften</span>
+            <span class="achievement-count">{{ unlocked|length }} von {{ (unlocked|length + locked|length) }} Errungenschaften</span>
         </div>
     </div>
 
-    {% if all_achievements and all_achievements|length > 0 %}
     <div class="achievements-progress glass-card">
         <div class="progress-bar">
-            <div class="progress-fill" style="width: {{ (user_achievements|length / all_achievements|length * 100)|round }}%"></div>
+            <div class="progress-fill" style="width: {{ (unlocked|length / (unlocked|length + locked|length) * 100)|round }}%"></div>
         </div>
-        <span class="progress-text">{{ (user_achievements|length / all_achievements|length * 100)|round }}% abgeschlossen</span>
+        <span class="progress-text">{{ (unlocked|length / (unlocked|length + locked|length) * 100)|round }}% abgeschlossen</span>
     </div>
-    {% else %}
-    <div class="achievements-progress glass-card">
-        <p>Noch keine Achievements verfügbar.</p>
-    </div>
-    {% endif %}
 
     <div class="achievements-grid">
-        {% if all_achievements %}
-            {% for achievement in all_achievements %}
-            <div class="achievement-card glass-card {% if achievement in user_achievements %}achieved{% endif %}">
+        <!-- Freigeschaltete Achievements -->
+        {% if unlocked %}
+            {% for achievement in unlocked %}
+            <div class="achievement-card glass-card achieved">
                 <div class="achievement-icon">{{ achievement.title.split(' ')[0] }}</div>
                 <div class="achievement-info">
                     <h3>{{ achievement.title.split(' ', 1)[1] }}</h3>
                     <p>{{ achievement.description }}</p>
-                    {% if achievement in user_achievements %}
-                        <span class="achievement-status achieved">Freigeschaltet</span>
-                    {% else %}
-                        <span class="achievement-status locked">Noch nicht freigeschaltet</span>
-                    {% endif %}
+                    <span class="achievement-status achieved">Freigeschaltet</span>
                 </div>
             </div>
             {% endfor %}
-        {% else %}
+        {% endif %}
+
+        <!-- Gesperrte Achievements -->
+        {% if locked %}
+            {% for achievement in locked %}
+            <div class="achievement-card glass-card">
+                <div class="achievement-icon">{{ achievement.title.split(' ')[0] }}</div>
+                <div class="achievement-info">
+                    <h3>{{ achievement.title.split(' ', 1)[1] }}</h3>
+                    <p>{{ achievement.description }}</p>
+                    <span class="achievement-status locked">Noch nicht freigeschaltet</span>
+                </div>
+            </div>
+            {% endfor %}
+        {% endif %}
+
+        {% if not unlocked and not locked %}
             <p>Keine Achievements verfügbar.</p>
         {% endif %}
     </div>
