@@ -1,20 +1,20 @@
 """
 MovieProjekt Flask App
+Hauptmodul der Flask-Anwendung für das MovieProjekt.
+Hier werden die zentralen Services, Routen und Konfigurationen initialisiert.
 """
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory, session
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory
+from flask_login import login_user, logout_user, login_required, current_user
 from flask_wtf.csrf import CSRFProtect
 from flask_wtf import FlaskForm
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func, case
 import random
-from datetime import datetime, timedelta, UTC
-import json
+from datetime import datetime, UTC
 
 from ai_request import AIRequest
 from datamanager.sqlite_data_manager import SQliteDataManager
-from data_models import User, Movie, UserMovie, SuggestedQuestion, Review, WatchlistItem, QuizAttempt, UserAchievement, Achievement
-from movie_api import OMDBClient
+from data_models import User, Movie, UserMovie, SuggestedQuestion, Review, QuizAttempt, UserAchievement, Achievement
 from services.quiz_service import QuizService
 from services.auth_service import AuthService, init_login_manager
 from services.watchlist_service import WatchlistService
@@ -23,16 +23,21 @@ from services.movie_update_service import MovieUpdateService
 
 app = Flask(__name__)
 app.config.update(
-    ENV='development',
-    DEBUG=True,
-    SECRET_KEY='dein-geheimer-schluessel',
-    WTF_CSRF_ENABLED=True
+    ENV='development',  # Entwicklungsumgebung
+    DEBUG=True,         # Debug-Modus aktivieren
+    SECRET_KEY='dein-geheimer-schluessel',  # Geheimschlüssel für Sessions und CSRF
+    WTF_CSRF_ENABLED=True  # CSRF-Schutz aktivieren
 )
 
 csrf = CSRFProtect(app)
 
-# Füge den shuffle-Filter zu Jinja2 hinzu
+# Füge den shuffle-Filter zu Jinja2 hinzu, um Listen in Templates zufällig zu mischen
 def jinja2_shuffle(seq):
+    """
+    Mischt eine Sequenz für die Verwendung in Jinja2-Templates.
+    :param seq: Sequenz (z.B. Liste), die gemischt werden soll
+    :return: Gemischte Sequenz
+    """
     try:
         result = list(seq)
         random.shuffle(result)
@@ -210,18 +215,30 @@ def update_user_movie(user_id, movie_id):
         chosen_user = data_manager.get_user(user_id)
         movie = data_manager.get_movie(movie_id)
         user_movie = data_manager.get_user_movie(user_id, movie_id)
-        user_rating = request.form["user_rating"]
-        user_comment = request.form["user_comment"] if "user_comment" in request.form else None
+        user_rating = request.form.get("user_rating")
+        user_comment = request.form.get("user_comment")
         try:
-            data_manager.update_user_movie(user_id=user_id, movie_id=movie_id,
-                                           update_data={"user_rating": user_rating,
-                                                        "user_comment": user_comment})
+            data_manager.update_user_movie(
+                user_id=user_id,
+                movie_id=movie_id,
+                update_data={"user_rating": user_rating, "user_comment": user_comment}
+            )
             new_user_movie = data_manager.get_user_movie(user_id, movie_id)
-            return render_template("user_movie.html", user_movie=new_user_movie,
-                                   user=chosen_user, movie=movie, success=True)
-        except Exception as e:
-            return render_template("user_movie.html", user_movie=user_movie,
-                                   user=chosen_user, movie=movie, success=False, error=e)
+            return render_template(
+                "user_movie.html",
+                user_movie=new_user_movie,
+                user=chosen_user,
+                movie=movie,
+                success=True
+            )
+        except Exception:
+            return render_template(
+                "user_movie.html",
+                user_movie=user_movie,
+                user=chosen_user,
+                movie=movie,
+                success=False
+            )
 
 
 # Adding new users
@@ -230,16 +247,16 @@ def new_user():
     if request.method == "GET":
         return render_template("new_user.html")
     elif request.method == "POST":
-        name = request.form["name"]
-        user = User(name=name)
+        name = request.form.get("name")
+        user = User(name=name, username=name)
         with data_manager.SessionFactory() as session:
             try:
                 session.add(user)
                 session.commit()
                 return render_template("new_user.html", success=True)
-            except Exception as e:
+            except Exception:
                 session.rollback()
-                return render_template("new_user.html", success=False, error=e)
+                return render_template("new_user.html", success=False)
 
 
 # Adding new movies
@@ -821,8 +838,6 @@ def profile():
 
         # Berechne die Statistiken
         with data_manager.SessionFactory() as session:
-            # Hole die durchschnittliche Bewertung für den Benutzer
-            from sqlalchemy import func
             user.reviews_count = len(user.reviews)
             user.watchlist_count = len(user.watchlist_items)
             user.quiz_attempts_count = len(user.quiz_attempts)
@@ -837,8 +852,7 @@ def profile():
 
         return render_template('profile.html',
                             user=user,
-                            user_stats=user_stats,  # Füge user_stats zum Template-Kontext hinzu
-                            stats=stats if 'stats' in locals() else None)  # Optional: behalte stats für Abwärtskompatibilität
+                            user_stats=user_stats)
 @app.route('/profile/settings', methods=['POST'])
 @login_required
 def update_settings():
