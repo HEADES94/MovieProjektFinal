@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>React Movies - CineVerse</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <!-- Twinkling Stars Background -->
+    <div class="stars">
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <a href="{{ url_for('home') }}" class="logo">CineVerse</a>
+            <nav class="nav-menu">
+                <a href="{{ url_for('home') }}" class="nav-item">🏠 Home</a>
+                <a href="{{ url_for('list_movies') }}" class="nav-item active">🎬 Filme</a>
+                <a href="{{ url_for('quiz_home') }}" class="nav-item">🧠 Quiz</a>
+                {% if current_user.is_authenticated %}
+                    <a href="{{ url_for('profile') }}" class="nav-item">👤 Profil</a>
+                    <a href="{{ url_for('logout') }}" class="nav-item">🚪 Logout</a>
+                {% else %}
+                    <a href="{{ url_for('login') }}" class="nav-item">🔑 Login</a>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    <!-- React App Container -->
+    <div id="react-root"></div>
+
+    <!-- Fallback für Browser ohne JavaScript -->
+    <noscript>
+        <div class="container" style="max-width: 1400px; margin: 0 auto; padding: 2rem;">
+            <h1>JavaScript erforderlich</h1>
+            <p>Bitte aktivieren Sie JavaScript, um die moderne Movie-App zu nutzen.</p>
+            <a href="{{ url_for('list_movies') }}" class="btn btn-primary">Zur klassischen Ansicht</a>
+        </div>
+    </noscript>
+
+    <!-- Development Script - wird in Produktion durch gebaute Datei ersetzt -->
+    <script type="module" src="http://localhost:3000/@vite/client"></script>
+    <script type="module" src="http://localhost:3000/main.jsx"></script>
+</body>
+</html>

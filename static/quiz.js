@@ -145,58 +145,134 @@ document.addEventListener('DOMContentLoaded', function() {
                     let achievementsBanner = '';
                     if (data.achievements && data.achievements.length > 0) {
                         achievementsBanner = `
-                        <div class="achievement-banner" style="background: #10b98122; border-left: 6px solid #10b981; padding: 1.5rem; margin-bottom: 2rem; border-radius: 8px; animation: fadeIn 1s;">
-                            <h2 style="color: #10b981; margin-bottom: 0.5rem;">🎉 Neuer Erfolg freigeschaltet!</h2>
+                        <div class="achievement-banner" style="background: linear-gradient(135deg, #10b981, #059669); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; color: white; animation: slideInUp 0.6s ease-out;">
+                            <h2 style="color: white; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                🎉 Achievement freigeschaltet!
+                            </h2>
                             ${data.achievements.map(a => `
-                                <div style="margin-bottom: 1rem;">
-                                    <span style="font-size:2rem;">${a.title.split(' ')[0]}</span>
-                                    <span style="font-weight:bold; color:#10b981;">${a.title}</span><br>
-                                    <span style="color:#222;">${a.description}</span>
+                                <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px; margin-bottom: 0.5rem;">
+                                    <div style="font-size: 1.2rem; font-weight: bold; color: #ffd700;">${a.title}</div>
+                                    <div style="color: rgba(255,255,255,0.9); margin-top: 0.5rem;">${a.description}</div>
                                 </div>
                             `).join('')}
                         </div>`;
                     }
 
                     // Erstelle die Zusammenfassung der Fragen
-                    const questionsHtml = data.answered_questions.map((q, index) => `
-                        <div class="question-result ${q.is_correct ? 'correct' : 'incorrect'}">
-                            <h4>Frage ${index + 1}</h4>
-                            <p>${q.question}</p>
-                            <p class="user-answer">
-                                Deine Antwort: <span class="${q.is_correct ? 'text-success' : 'text-danger'}">${q.user_answer}</span>
-                            </p>
+                    const questionsHtml = data.question_results.map((q, index) => `
+                        <div class="question-result ${q.is_correct ? 'correct' : 'incorrect'}" style="
+                            background: ${q.is_correct ? '#dcfce7' : '#fee2e2'};
+                            border-left: 4px solid ${q.is_correct ? '#10b981' : '#ef4444'};
+                            padding: 1rem;
+                            margin-bottom: 1rem;
+                            border-radius: 8px;
+                        ">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                <span style="font-size: 1.5rem;">${q.is_correct ? '✅' : '❌'}</span>
+                                <h4 style="margin: 0; color: #374151;">Frage ${index + 1}</h4>
+                            </div>
+                            <p style="margin-bottom: 1rem; font-weight: 500; color: #374151;">${q.question_text}</p>
+                            <div style="background: white; padding: 0.75rem; border-radius: 6px; margin-bottom: 0.5rem;">
+                                <strong>Deine Antwort:</strong>
+                                <span style="color: ${q.is_correct ? '#10b981' : '#ef4444'}; font-weight: bold;">
+                                    ${q.user_answer}
+                                </span>
+                            </div>
                             ${!q.is_correct ? `
-                                <p class="correct-answer">
-                                    Richtige Antwort: <span class="text-success">${q.correct_answer}</span>
-                                </p>
+                                <div style="background: #f0fdf4; padding: 0.75rem; border-radius: 6px; border: 1px solid #10b981;">
+                                    <strong>Richtige Antwort:</strong>
+                                    <span style="color: #10b981; font-weight: bold;">${q.correct_answer}</span>
+                                </div>
                             ` : ''}
                         </div>
                     `).join('');
 
                     // Erstelle die Ergebnisanzeige
                     resultsSection.innerHTML = `
-                        <div class="quiz-results">
-                            <h2>Quiz abgeschlossen! 🎉</h2>
-                            <div class="score-info">
-                                <div class="score-circle">
-                                    <span class="score-number">${data.score}</span>
-                                    <span class="score-label">Punkte</span>
+                        <div class="quiz-results" style="animation: fadeInUp 0.8s ease-out;">
+                            <div style="text-align: center; margin-bottom: 2rem;">
+                                <h2 style="color: #10b981; margin-bottom: 1rem; font-size: 2.5rem;">
+                                    🎉 Quiz abgeschlossen!
+                                </h2>
+                                <div class="score-display" style="
+                                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                    color: white;
+                                    padding: 2rem;
+                                    border-radius: 20px;
+                                    display: inline-block;
+                                    margin-bottom: 1rem;
+                                    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+                                ">
+                                    <div style="font-size: 3rem; font-weight: bold; margin-bottom: 0.5rem;">
+                                        ${data.score}
+                                    </div>
+                                    <div style="font-size: 1.2rem; opacity: 0.9;">Punkte</div>
                                 </div>
                             </div>
-                            <div class="quiz-stats">
-                                <p>Richtige Antworten: <strong>${data.correct_count}</strong> von <strong>${data.total_questions}</strong></p>
-                                <div class="progress-bar">
-                                    <div class="progress" style="width: ${(data.correct_count / data.total_questions) * 100}%"></div>
+
+                            <div class="quiz-stats" style="
+                                background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                                color: white;
+                                padding: 1.5rem;
+                                border-radius: 12px;
+                                margin-bottom: 2rem;
+                                text-align: center;
+                            ">
+                                <div style="font-size: 1.5rem; margin-bottom: 1rem;">
+                                    <strong>${data.correct_count}</strong> von <strong>${data.total_questions}</strong> richtig
+                                </div>
+                                <div style="background: rgba(255,255,255,0.2); border-radius: 10px; height: 20px; overflow: hidden;">
+                                    <div style="
+                                        background: rgba(255,255,255,0.8);
+                                        height: 100%;
+                                        width: ${(data.correct_count / data.total_questions) * 100}%;
+                                        transition: width 1s ease-out;
+                                        border-radius: 10px;
+                                    "></div>
+                                </div>
+                                <div style="margin-top: 0.5rem; font-size: 1.1rem;">
+                                    ${Math.round((data.correct_count / data.total_questions) * 100)}% richtig
                                 </div>
                             </div>
+
                             ${achievementsBanner}
-                            <div class="questions-summary">
-                                <h3>Zusammenfassung</h3>
+
+                            <div class="questions-summary" style="margin-bottom: 2rem;">
+                                <h3 style="color: #374151; margin-bottom: 1rem; font-size: 1.8rem; text-align: center;">
+                                    📋 Detaillierte Zusammenfassung
+                                </h3>
                                 ${questionsHtml}
                             </div>
-                            <div class="quiz-actions">
-                                <a href="/quiz" class="btn btn-primary">Zurück zur Quiz-Übersicht</a>
-                                <a href="/quiz/${movieId}?difficulty=${difficulty}" class="btn btn-secondary">Erneut versuchen</a>
+
+                            <div class="quiz-actions" style="
+                                display: flex;
+                                gap: 1rem;
+                                justify-content: center;
+                                flex-wrap: wrap;
+                                margin-top: 2rem;
+                            ">
+                                <a href="/quiz" class="btn btn-primary" style="
+                                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                    color: white;
+                                    padding: 0.75rem 1.5rem;
+                                    border-radius: 8px;
+                                    text-decoration: none;
+                                    font-weight: bold;
+                                    transition: transform 0.2s;
+                                " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                                    🏠 Zurück zur Quiz-Übersicht
+                                </a>
+                                <a href="/quiz/${movieId}?difficulty=${difficulty}" class="btn btn-secondary" style="
+                                    background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+                                    color: #8b4513;
+                                    padding: 0.75rem 1.5rem;
+                                    border-radius: 8px;
+                                    text-decoration: none;
+                                    font-weight: bold;
+                                    transition: transform 0.2s;
+                                " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                                    🔄 Erneut versuchen
+                                </a>
                             </div>
                         </div>
                     `;
@@ -205,12 +281,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     resultsSection.style.display = 'block';
                     resultsSection.scrollIntoView({ behavior: 'smooth' });
                 } else {
-                    alert('Fehler beim Speichern der Antworten: ' + data.error);
+                    alert('Fehler beim Übermitteln des Quiz: ' + (data.error || 'Unbekannter Fehler'));
                 }
             })
             .catch(error => {
-                console.error('Fehler:', error);
-                alert('Ein Fehler ist aufgetreten. Bitte versuche es später erneut.');
+                console.error('Quiz submission error:', error);
+                alert('Ein Fehler ist aufgetreten. Bitte versuche es erneut.');
             });
         });
     }

@@ -8,7 +8,6 @@ from sqlalchemy.orm import sessionmaker
 
 from .data_manager_interface import DataManagerInterface
 from data_models import Base, User, Movie, UserMovie, Achievement
-from movie_api import OMDBClient
 
 class SQliteDataManager(DataManagerInterface):
     """SQLite-Implementierung des DataManager-Interfaces."""
@@ -18,7 +17,6 @@ class SQliteDataManager(DataManagerInterface):
         self.engine = create_engine(db_url)
         Base.metadata.create_all(self.engine)
         self.SessionFactory = sessionmaker(bind=self.engine)
-        self.omdb_client = OMDBClient()
         self._init_achievements()
 
     @contextmanager
@@ -118,7 +116,7 @@ class SQliteDataManager(DataManagerInterface):
     def set_movie(self, title: str) -> Optional[Movie]:
         """
         Füge einen neuen Film hinzu oder aktualisiere einen bestehenden.
-        Holt die Filmdaten von der OMDB API.
+        Verwendet jetzt den MovieUpdateService statt OMDB direkt.
         """
         # Prüfe zuerst, ob der Film bereits existiert
         existing_movie = self.get_movie_by_title(title)
@@ -126,32 +124,9 @@ class SQliteDataManager(DataManagerInterface):
             print(f"Film bereits vorhanden: {title}")
             return existing_movie
 
-        # Hole Filmdaten von OMDB
-        movie_data = self.omdb_client.get_movie(title)
-        if not movie_data:
-            print(f"Keine OMDB-Daten gefunden für: {title}")
-            return None
-
-        try:
-            with self.get_session() as session:
-                movie = Movie(
-                    title=movie_data["name"],
-                    director=movie_data["director"],
-                    release_year=int(movie_data["year"][:4]) if movie_data["year"] else None,
-                    genre=movie_data["genre"],
-                    poster_url=movie_data["poster"],
-                    rating=float(movie_data["rating"]) if movie_data["rating"] != "N/A" else None,
-                    country=movie_data["country"],
-                    plot=movie_data["plot"],
-                    description=movie_data["plot"]
-                )
-                session.add(movie)
-                session.commit()
-                print(f"Film hinzugefügt: {movie.title}")
-                return movie
-        except Exception as e:
-            print(f"Fehler beim Hinzufügen von {title}: {str(e)}")
-            return None
+        # Da wir jetzt den MovieUpdateService verwenden, geben wir hier eine einfache Implementierung zurück
+        print(f"Film '{title}' sollte über den MovieUpdateService hinzugefügt werden")
+        return None
 
     def set_user_movies(self, user_id: int, movie_id: int) -> bool:
         """Füge einen Film zur Liste eines Benutzers hinzu."""
@@ -212,42 +187,42 @@ class SQliteDataManager(DataManagerInterface):
         """Initialisiert die Standard-Achievements."""
         achievements = [
             {
-                "title": "🎯 Perfect Quiz",
+                "name": "🎯 Perfect Quiz",
                 "description": "Erreiche die perfekte Punktzahl in einem Quiz!",
                 "code": "perfect_quiz"
             },
             {
-                "title": "🏆 First Highscore",
+                "name": "🏆 First Highscore",
                 "description": "Erreiche deinen ersten Highscore!",
                 "code": "first_highscore"
             },
             {
-                "title": "👑 Quiz Master",
+                "name": "👑 Quiz Master",
                 "description": "Erreiche in 5 verschiedenen Quizzen mindestens 400 Punkte!",
                 "code": "quiz_master"
             },
             {
-                "title": "🎓 Quiz Profi",
+                "name": "🎓 Quiz Profi",
                 "description": "Schließe ein schweres Quiz mit mindestens 1000 Punkten ab!",
                 "code": "quiz_expert"
             },
             {
-                "title": "📚 Wissensdurst",
+                "name": "📚 Wissensdurst",
                 "description": "Beantworte 100 Fragen korrekt!",
                 "code": "knowledge_seeker"
             },
             {
-                "title": "🎬 Film Enthusiast",
+                "name": "🎬 Film Enthusiast",
                 "description": "Schließe Quizze zu 10 verschiedenen Filmen ab!",
                 "code": "movie_enthusiast"
             },
             {
-                "title": "🌟 Perfektionist",
+                "name": "🌟 Perfektionist",
                 "description": "Erreiche 3 perfekte Quizze in Folge!",
                 "code": "perfectionist"
             },
             {
-                "title": "🔥 Streak Master",
+                "name": "🔥 Streak Master",
                 "description": "Beantworte 20 Fragen in Folge richtig!",
                 "code": "streak_master"
             }

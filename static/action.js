@@ -155,4 +155,81 @@ document.addEventListener('DOMContentLoaded', function() {
         // to avoid temporary distortions before the pixels fill in.
         // ctx.clearRect(0, 0, canvas.width, canvas.height); // Optional: clear on resize
     });
+
+    // Genre Filter Functionality
+    function filterByGenre(genre) {
+        const currentUrl = new URL(window.location.href);
+
+        // Update or add the genre parameter
+        if (genre) {
+            currentUrl.searchParams.set('genre', genre);
+        } else {
+            currentUrl.searchParams.delete('genre');
+        }
+
+        // Preserve other parameters like search query
+        window.location.href = currentUrl.toString();
+    }
+
+    // Sort Movies Functionality
+    function sortMovies() {
+        const sortSelect = document.getElementById('sortSelect');
+        const currentUrl = new URL(window.location.href);
+
+        if (sortSelect && sortSelect.value) {
+            currentUrl.searchParams.set('sort', sortSelect.value);
+        } else {
+            currentUrl.searchParams.delete('sort');
+        }
+
+        window.location.href = currentUrl.toString();
+    }
+
+    // Enhanced Movie Card Interactions
+    function initializeMovieInteractions() {
+        const movieCards = document.querySelectorAll('.movie-card');
+
+        movieCards.forEach(card => {
+            // Add click to navigate to movie details
+            card.addEventListener('click', function(e) {
+                // Don't navigate if clicking on rating badge or other interactive elements
+                if (e.target.closest('.rating-badge') || e.target.closest('button')) {
+                    return;
+                }
+
+                const movieId = this.dataset.movieId;
+                if (movieId) {
+                    window.location.href = `/movie/${movieId}`;
+                }
+            });
+
+            // Add hover effects for better UX
+            card.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-12px) scale(1.03)';
+            });
+
+            card.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0) scale(1)';
+            });
+        });
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeMovieInteractions();
+
+        // Add smooth scrolling for better UX
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    });
 });

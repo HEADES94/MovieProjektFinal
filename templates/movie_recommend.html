@@ -16,7 +16,7 @@
 
     <div class="recommendation-form glass-card">
         <h3>Was möchten Sie sehen?</h3>
-        <form method="POST" action="{{ url_for('recommendation', user_id=user.id) }}">
+        <form method="POST" action="{{ url_for('recommend') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-group">
                 <label for="genre">Genre auswählen:</label>
@@ -32,83 +32,158 @@
         </form>
     </div>
 
-    {% if recommendation %}
-        <div class="movie-recommendation glass-card">
-            <div class="movie-poster">
-                {% if recommendation.poster_url %}
-                    <img src="{{ recommendation.poster_url }}" alt="{{ recommendation.title }}">
-                {% else %}
-                    <img src="{{ url_for('static', filename='default_poster.jpg') }}" alt="Kein Poster verfügbar">
-                {% endif %}
-            </div>
-            <div class="movie-info">
-                <h3>{{ recommendation.title }}</h3>
-                {% if recommendation.release_year %}
-                    <p class="year">{{ recommendation.release_year }}</p>
-                {% endif %}
-                {% if recommendation.genre %}
-                    <p class="genre">{{ recommendation.genre }}</p>
-                {% endif %}
-                {% if recommendation.director %}
-                    <p class="director">Regie: {{ recommendation.director }}</p>
-                {% endif %}
-                {% if recommendation.rating %}
-                    <p class="rating">⭐ {{ "%.1f"|format(recommendation.rating) }}</p>
-                {% endif %}
-                {% if recommendation.description %}
-                    <p class="description">{{ recommendation.description }}</p>
-                {% endif %}
-                {% if reason %}
-                    <p class="reason">{{ reason }}</p>
-                {% endif %}
-            </div>
-            <div class="movie-actions">
-                <form action="{{ url_for('add_to_watchlist', movie_id=recommendation.id) }}" method="POST">
-                    <button type="submit" class="btn-primary">Zur Watchlist hinzufügen</button>
-                </form>
-                <a href="{{ url_for('movie_quiz', movie_id=recommendation.id) }}" class="btn-secondary">Quiz starten</a>
+    {% if recommended_movies %}
+        <div class="recommendations-section">
+            <h3>Empfohlene Filme für {{ genre_preference }}:</h3>
+            {% if reason %}
+                <p class="reason">{{ reason }}</p>
+            {% endif %}
+
+            <div class="movie-grid">
+                {% for movie in recommended_movies %}
+                    <div class="movie-recommendation glass-card">
+                        <div class="movie-poster">
+                            {% if movie.poster_url %}
+                                <img src="{{ movie.poster_url }}" alt="{{ movie.title }}">
+                            {% else %}
+                                <img src="{{ url_for('static', filename='default_poster.jpg') }}" alt="Kein Poster verfügbar">
+                            {% endif %}
+                        </div>
+                        <div class="movie-info">
+                            <h4><a href="{{ url_for('movie_details', movie_id=movie.id) }}">{{ movie.title }}</a></h4>
+                            {% if movie.release_year %}
+                                <p class="year">{{ movie.release_year }}</p>
+                            {% endif %}
+                            {% if movie.genre %}
+                                <p class="genre">{{ movie.genre }}</p>
+                            {% endif %}
+                            {% if movie.director %}
+                                <p class="director">Regie: {{ movie.director }}</p>
+                            {% endif %}
+                            {% if movie.rating %}
+                                <p class="rating">⭐ {{ "%.1f"|format(movie.rating) }}</p>
+                            {% endif %}
+                            {% if movie.description %}
+                                <p class="description">{{ movie.description[:200] }}{% if movie.description|length > 200 %}...{% endif %}</p>
+                            {% endif %}
+                        </div>
+                        <div class="movie-actions">
+                            {% if current_user.is_authenticated %}
+                                <form action="{{ url_for('add_to_watchlist', movie_id=movie.id) }}" method="POST" style="display: inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-primary btn-sm">Zur Watchlist</button>
+                                </form>
+                                <a href="{{ url_for('movie_quiz', movie_id=movie.id) }}" class="btn btn-secondary btn-sm">Quiz starten</a>
+                            {% endif %}
+                            <a href="{{ url_for('movie_details', movie_id=movie.id) }}" class="btn btn-outline btn-sm">Details</a>
+                        </div>
+                    </div>
+                {% endfor %}
             </div>
         </div>
     {% endif %}
 </div>
 
 <style>
+.recommendations-section {
+    margin-top: 2rem;
+}
+
+.recommendations-section h3 {
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+}
+
+.reason {
+    margin-bottom: 1.5rem;
+    font-style: italic;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.movie-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
 .movie-recommendation {
+    border-radius: 12px;
+    overflow: hidden;
+    transition: transform 0.3s ease;
+    height: 100%;
     display: flex;
-    gap: 2rem;
-    padding: 2rem;
-    margin-bottom: 2rem;
+    flex-direction: column;
+}
+
+.movie-recommendation:hover {
+    transform: translateY(-5px);
+}
+
+.movie-poster {
+    text-align: center;
+    padding: 1rem;
 }
 
 .movie-poster img {
-    max-width: 200px;
+    width: 100%;
+    max-width: 150px;
+    height: auto;
+    max-height: 225px;
+    object-fit: cover;
     border-radius: 8px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .movie-info {
+    padding: 0 1rem;
     flex: 1;
+    display: flex;
+    flex-direction: column;
 }
 
-.movie-info h3 {
-    margin-top: 0;
+.movie-info h4 {
+    margin: 0 0 0.5rem 0;
     color: var(--text-primary);
 }
 
-.movie-info p {
-    margin: 0.5rem 0;
+.movie-info h4 a {
+    color: inherit;
+    text-decoration: none;
 }
 
-.reason {
-    margin-top: 1rem;
-    font-style: italic;
+.movie-info h4 a:hover {
+    color: var(--primary-color);
+}
+
+.movie-info p {
+    margin: 0.25rem 0;
+    font-size: 0.9rem;
     color: var(--text-secondary);
 }
 
+.movie-info .description {
+    flex: 1;
+    margin-top: 0.5rem;
+}
+
 .movie-actions {
+    padding: 1rem;
     display: flex;
-    gap: 1rem;
-    margin-top: 1rem;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+}
+
+.recommendation-form {
+    padding: 2rem;
+    margin-bottom: 2rem;
 }
 
 .alert {
@@ -126,8 +201,11 @@
     background-color: #d9534f;
 }
 
-.recommendation-form {
-    padding: 2rem;
+@media (max-width: 768px) {
+    .movie-grid {
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+    }
 }
 </style>
 {% endblock %}

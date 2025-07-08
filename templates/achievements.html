@@ -23,9 +23,9 @@
         {% if unlocked %}
             {% for achievement in unlocked %}
             <div class="achievement-card glass-card achieved">
-                <div class="achievement-icon">{{ achievement.title.split(' ')[0] }}</div>
+                <div class="achievement-icon">{{ achievement.name.split(' ')[0] }}</div>
                 <div class="achievement-info">
-                    <h3>{{ achievement.title.split(' ', 1)[1] }}</h3>
+                    <h3>{{ achievement.name.split(' ', 1)[1] }}</h3>
                     <p>{{ achievement.description }}</p>
                     <span class="achievement-status achieved">Freigeschaltet</span>
                 </div>
@@ -37,9 +37,9 @@
         {% if locked %}
             {% for achievement in locked %}
             <div class="achievement-card glass-card">
-                <div class="achievement-icon">{{ achievement.title.split(' ')[0] }}</div>
+                <div class="achievement-icon">{{ achievement.name.split(' ')[0] }}</div>
                 <div class="achievement-info">
-                    <h3>{{ achievement.title.split(' ', 1)[1] }}</h3>
+                    <h3>{{ achievement.name.split(' ', 1)[1] }}</h3>
                     <p>{{ achievement.description }}</p>
                     <span class="achievement-status locked">Noch nicht freigeschaltet</span>
                 </div>

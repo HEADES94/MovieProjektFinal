@@ -1,137 +1,216 @@
 {% extends "base.html" %}
 
-{% block title %}Home - MovieProjekt{% endblock %}
+{% block title %}CineVerse - Das Universum der Filme{% endblock %}
 
 {% block content %}
-<!-- Hero Section -->
-<section class="hero">
-    <h1 class="gradient-text">Teste dein Filmwissen</h1>
-    <p>Entdecke neue Filme, beantworte KI-generierte Fragen und sammle Achievements!</p>
-    <div class="cta-buttons">
-        <a href="{{ url_for('quiz_home') }}" class="btn-primary">
-            🎯 Quiz starten
-        </a>
-        <a href="{{ url_for('list_movies') }}" class="btn-secondary">
-            🎬 Filme entdecken
-        </a>
-    </div>
-</section>
+<div class="container">
+    <!-- Hero Section -->
+    <section class="hero">
+        <h1 class="hero-title">Willkommen bei CineVerse</h1>
+        <div class="hero-tagline" style="font-family: var(--font-heading); font-size: 1.8rem; color: var(--primary); margin-bottom: 1rem; font-style: italic;">
+            Das Universum der Filme
+        </div>
+        <p class="hero-subtitle">
+            Entdecke dein persönliches Film-Universum mit KI-gestützten Empfehlungen,
+            spannenden Quizzes und einer lebendigen Community von Film-Liebhabern.
+        </p>
 
-<!-- Stats Dashboard -->
-{% if current_user.is_authenticated %}
-<section class="section">
-    <div class="stats-grid">
-        <div class="stat-card glass-card">
-            <div class="stat-number">{{ user_stats.reviews_count }}</div>
-            <div class="stat-label">Bewertete Filme</div>
+        <div class="hero-actions" style="margin-top: 2rem;">
+            {% if not current_user.is_authenticated %}
+                <a href="{{ url_for('register') }}" class="btn btn-primary">
+                    <i class="fas fa-rocket"></i> Jetzt starten
+                </a>
+                <a href="{{ url_for('list_movies') }}" class="btn btn-secondary">
+                    <i class="fas fa-search"></i> Filme entdecken
+                </a>
+            {% else %}
+                <a href="{{ url_for('recommend') }}" class="btn btn-primary">
+                    <i class="fas fa-magic"></i> Film-Empfehlung
+                </a>
+                <a href="{{ url_for('quiz_home') }}" class="btn btn-secondary">
+                    <i class="fas fa-brain"></i> Quiz spielen
+                </a>
+            {% endif %}
         </div>
-        <div class="stat-card glass-card">
-            <div class="stat-number">{{ user_stats.quiz_attempts }}</div>
-            <div class="stat-label">Gespielte Quizze</div>
-        </div>
-        <div class="stat-card glass-card">
-            <div class="stat-number">{{ user_stats.achievements }}</div>
-            <div class="stat-label">Errungenschaften</div>
-        </div>
-        <div class="stat-card glass-card">
-            <div class="stat-number">{{ user_stats.watchlist_count }}</div>
-            <div class="stat-label">Filme in Watchlist</div>
-        </div>
-    </div>
-</section>
-{% endif %}
+    </section>
 
-<!-- Featured Movies -->
-<section class="section">
-    <h2 class="section-title gradient-text">Beliebte Filme</h2>
-    <div class="movie-grid">
-        {% for movie in movies[:6] %}
-        <div class="movie-card glass-card">
-            <div class="movie-poster">
-                <img src="{{ movie.poster_url }}" alt="{{ movie.title }}">
-                <div class="movie-overlay">
-                    <div class="movie-actions">
-                        <a href="{{ url_for('movie_quiz', movie_id=movie.id) }}" class="btn-primary btn-small">🎯 Quiz</a>
-                        {% if current_user.is_authenticated %}
-                        <form action="{{ url_for('add_to_watchlist', movie_id=movie.id) }}" method="POST" style="display: inline;">
-                            <button type="submit" class="btn-secondary btn-small">➕ Watchlist</button>
-                        </form>
+    <!-- Features Section -->
+    <section class="features-showcase" style="margin: 4rem 0;">
+        <div class="features-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem;">
+            <div class="feature-card card">
+                <div class="feature-icon" style="font-size: 3rem; color: var(--primary); margin-bottom: 1rem;">🤖</div>
+                <h3>KI-Empfehlungen</h3>
+                <p>Unsere fortschrittliche KI analysiert deine Vorlieben und empfiehlt perfekt passende Filme.</p>
+            </div>
+
+            <div class="feature-card card">
+                <div class="feature-icon" style="font-size: 3rem; color: var(--secondary); margin-bottom: 1rem;">🧠</div>
+                <h3>Film-Quiz</h3>
+                <p>Teste dein Filmwissen mit herausfordernden Quizzes und sammle Achievements.</p>
+            </div>
+
+            <div class="feature-card card">
+                <div class="feature-icon" style="font-size: 3rem; color: var(--accent); margin-bottom: 1rem;">⭐</div>
+                <h3>Bewertungen & Reviews</h3>
+                <p>Bewerte Filme, schreibe Reviews und teile deine Meinung mit der Community.</p>
+            </div>
+
+            <div class="feature-card card">
+                <div class="feature-icon" style="font-size: 3rem; color: var(--success); margin-bottom: 1rem;">📝</div>
+                <h3>Persönliche Watchlist</h3>
+                <p>Speichere Filme für später und behalte den Überblick über deine Must-Watch-Liste.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Top Movies Section -->
+    {% if movies %}
+    <section class="top-movies">
+        <div class="section-header" style="text-align: center; margin-bottom: 3rem;">
+            <h2 style="font-family: var(--font-heading); font-size: 2.5rem; margin-bottom: 1rem;">
+                🎬 Top bewertete Filme
+            </h2>
+            <p style="color: var(--text-secondary); font-size: 1.1rem;">
+                Die besten Filme in unserer Datenbank - von der Community geliebt
+            </p>
+        </div>
+
+        <div class="movies-grid">
+            {% for movie in movies %}
+            <div class="movie-card" onclick="window.location.href='{{ url_for('movie_details', movie_id=movie.id) }}'">
+                {% if movie.rating %}
+                <div class="rating-badge">
+                    <i class="fas fa-star"></i> {{ "%.1f"|format(movie.rating) }}
+                </div>
+                {% endif %}
+
+                <div class="movie-poster">
+                    <img src="{{ movie.poster_url or url_for('static', filename='default_poster.jpg') }}"
+                         alt="{{ movie.title }}"
+                         onerror="this.src='{{ url_for('static', filename='default_poster.jpg') }}'">
+
+                    <div class="movie-overlay">
+                        <h3>{{ movie.title }}</h3>
+                        {% if movie.release_year %}
+                        <p><i class="fas fa-calendar"></i> {{ movie.release_year }}</p>
+                        {% endif %}
+                        {% if movie.genre %}
+                        <p><i class="fas fa-tags"></i> {{ movie.genre }}</p>
+                        {% endif %}
+                        {% if movie.director %}
+                        <p><i class="fas fa-user-tie"></i> {{ movie.director }}</p>
                         {% endif %}
                     </div>
                 </div>
             </div>
-            <div class="movie-info">
-                <h3 class="movie-title">{{ movie.title }}</h3>
-                <div class="movie-meta">
-                    <span>{{ movie.release_year }}</span>
-                    <span>{{ movie.genre }}</span>
-                    <div class="movie-rating">
-                        <span class="star">⭐</span>
-                        <span>{{ "%.1f"|format(movie.rating) if movie.rating is not none else "N/A" }}</span>
-                    </div>
+            {% endfor %}
+        </div>
+
+        <div style="text-align: center; margin-top: 3rem;">
+            <a href="{{ url_for('list_movies') }}" class="btn btn-primary">
+                <i class="fas fa-film"></i> Alle Filme entdecken
+            </a>
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- User Stats Section (if logged in) -->
+    {% if current_user.is_authenticated and user_stats %}
+    <section class="user-dashboard card">
+        <h2 style="font-family: var(--font-heading); margin-bottom: 2rem; text-align: center;">
+            <i class="fas fa-chart-line"></i> Deine CineVerse Statistiken
+        </h2>
+
+        <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2rem;">
+            <div class="stat-item" style="text-align: center; padding: 1rem;">
+                <div style="font-size: 2.5rem; color: var(--primary); margin-bottom: 0.5rem;">
+                    <i class="fas fa-star"></i>
                 </div>
+                <div style="font-size: 2rem; font-weight: bold; color: var(--primary);">{{ user_stats.reviews_count }}</div>
+                <div style="color: var(--text-secondary);">Bewertungen</div>
+            </div>
+
+            <div class="stat-item" style="text-align: center; padding: 1rem;">
+                <div style="font-size: 2.5rem; color: var(--secondary); margin-bottom: 0.5rem;">
+                    <i class="fas fa-bookmark"></i>
+                </div>
+                <div style="font-size: 2rem; font-weight: bold; color: var(--secondary);">{{ user_stats.watchlist_count }}</div>
+                <div style="color: var(--text-secondary);">Watchlist</div>
+            </div>
+
+            <div class="stat-item" style="text-align: center; padding: 1rem;">
+                <div style="font-size: 2.5rem; color: var(--accent); margin-bottom: 0.5rem;">
+                    <i class="fas fa-brain"></i>
+                </div>
+                <div style="font-size: 2rem; font-weight: bold; color: var(--accent);">{{ user_stats.quiz_attempts }}</div>
+                <div style="color: var(--text-secondary);">Quiz-Versuche</div>
+            </div>
+
+            <div class="stat-item" style="text-align: center; padding: 1rem;">
+                <div style="font-size: 2.5rem; color: var(--success); margin-bottom: 0.5rem;">
+                    <i class="fas fa-trophy"></i>
+                </div>
+                <div style="font-size: 2rem; font-weight: bold; color: var(--success);">{{ user_stats.achievements }}</div>
+                <div style="color: var(--text-secondary);">Erfolge</div>
             </div>
         </div>
-        {% endfor %}
-    </div>
-</section>
 
-<style>
-.hero {
-    text-align: center;
-    padding: 4rem 2rem;
-    max-width: 1200px;
-    margin: 2rem auto;
-}
+        <div style="text-align: center; margin-top: 2rem;">
+            <a href="{{ url_for('profile') }}" class="btn btn-secondary">
+                <i class="fas fa-user"></i> Vollständiges Profil
+            </a>
+        </div>
+    </section>
+    {% endif %}
 
-.hero h1 {
-    font-size: 3.5rem;
-    font-weight: 900;
-    margin-bottom: 1rem;
-    animation: textGlow 3s ease-in-out infinite alternate;
-}
+    <!-- Call-to-Action Section -->
+    {% if not current_user.is_authenticated %}
+    <section class="cta-section card" style="text-align: center; background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; border: none;">
+        <h2 style="font-family: var(--font-heading); font-size: 2.5rem; margin-bottom: 1rem;">
+            Bereit für dein Film-Abenteuer?
+        </h2>
+        <p style="font-size: 1.2rem; margin-bottom: 2rem; opacity: 0.9;">
+            Registriere dich kostenlos und entdecke eine neue Art, Filme zu erleben.
+        </p>
+        <a href="{{ url_for('register') }}" class="btn" style="background: white; color: var(--primary); border: none;">
+            <i class="fas fa-user-plus"></i> Kostenlos registrieren
+        </a>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}
 
-.hero p {
-    font-size: 1.25rem;
-    color: var(--text-secondary);
-    margin-bottom: 2rem;
-    max-width: 600px;
-    margin-left: auto;
-    margin-right: auto;
-}
+{% block scripts %}
+<script>
+    // Parallax effect for hero section
+    window.addEventListener('scroll', () => {
+        const scrolled = window.pageYOffset;
+        const hero = document.querySelector('.hero');
+        if (hero) {
+            hero.style.transform = `translateY(${scrolled * 0.5}px)`;
+        }
+    });
 
-.section {
-    padding: 2rem;
-    max-width: 1200px;
-    margin: 0 auto;
-}
+    // Animate stats on scroll
+    const observerOptions = {
+        threshold: 0.1,
+        rootMargin: '0px 0px -50px 0px'
+    };
 
-.section-title {
-    font-size: 2rem;
-    text-align: center;
-    margin-bottom: 2rem;
-}
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.style.opacity = '1';
+                entry.target.style.transform = 'translateY(0)';
+            }
+        });
+    }, observerOptions);
 
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 3rem;
-}
-
-@keyframes textGlow {
-    from { filter: brightness(1); }
-    to { filter: brightness(1.2); }
-}
-
-@media (max-width: 768px) {
-    .hero h1 {
-        font-size: 2.5rem;
-    }
-
-    .stats-grid {
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    }
-}
-</style>
+    document.querySelectorAll('.feature-card, .stat-item').forEach(el => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(20px)';
+        el.style.transition = 'all 0.6s ease-out';
+        observer.observe(el);
+    });
+</script>
 {% endblock %}

@@ -1,5 +1,5 @@
 """
-Movie Update Service - Automatische Aktualisierung der Filmdatenbank
+Movie Update Service - Automatic movie database updates.
 """
 import os
 import requests
@@ -9,10 +9,12 @@ from dotenv import load_dotenv
 from datamanager.sqlite_data_manager import SQliteDataManager
 from data_models import Movie, Actor, MovieActor
 
-# Lade Umgebungsvariablen
+# Load environment variables
 load_dotenv()
 
 class MovieUpdateService:
+    """Service for automatic movie database updates."""
+
     def __init__(self, data_manager: SQliteDataManager):
         self.data_manager = data_manager
         self.tmdb_api_key = os.getenv("TMDB_API_KEY")
@@ -21,33 +23,33 @@ class MovieUpdateService:
         self.omdb_url = "http://www.omdbapi.com/"
         self._processed_titles: Set[str] = set()
         self._last_update = None
-        self._update_interval = timedelta(hours=1)  # Zurück zum normalen Intervall von 1 Stunde
+        self._update_interval = timedelta(hours=1)
         self.headers = {
             'Authorization': f'Bearer {self.tmdb_api_key}',
             'accept': 'application/json'
         }
 
     def normalize_title(self, title: str) -> str:
-        """Normalisiert einen Filmtitel für besseren Vergleich"""
+        """Normalize a movie title for better comparison."""
         import re
-        # Entferne Sonderzeichen und mache alles lowercase
+        # Remove special characters and make everything lowercase
         normalized = re.sub(r'[^a-zA-Z0-9\s]', '', title.lower())
-        # Entferne mehrfache Leerzeichen
+        # Remove multiple spaces
         normalized = ' '.join(normalized.split())
         return normalized
 
     def clean_title(self, title: str) -> str:
-        """Bereinigt einen Filmtitel von häufigen Variationen"""
-        # Entferne häufige Zusätze
+        """Clean a movie title from common variations."""
+        # Remove common additions
         removals = [
-            r'\s*\([^)]*\)',  # Klammern und Inhalt
-            r'\s*\[[^\]]*\]',  # Eckige Klammern und Inhalt
-            r'\s*-\s*.*$',     # Alles nach einem Bindestrich
-            r'\s*:\s*.*$',     # Alles nach einem Doppelpunkt
-            r'\s+\d{4}$',      # Jahreszahl am Ende
-            r'\s*(Part|Teil)\s*\d+',  # "Part" oder "Teil" mit Nummer
-            r'\s*HD\s*$',      # HD am Ende
-            r'\s*\d+p\s*$',    # Auflösung (z.B. 1080p)
+            r'\s*\([^)]*\)',  # Parentheses and content
+            r'\s*\[[^\]]*\]',  # Square brackets and content
+            r'\s*-\s*.*$',     # Everything after a hyphen
+            r'\s*:\s*.*$',     # Everything after a colon
+            r'\s+\d{4}$',      # Year at the end
+            r'\s*(Part|Teil)\s*\d+',  # "Part" or "Teil" with number
+            r'\s*HD\s*$',      # HD at the end
+            r'\s*\d+p\s*$',    # Resolution (e.g. 1080p)
         ]
 
         result = title
@@ -58,50 +60,50 @@ class MovieUpdateService:
         return result.strip()
 
     def get_new_movies(self) -> List[Dict]:
-        """Holt neue Filme von TMDB API"""
-        # Datum für Filme der letzten 30 Jahre
+        """Get new movies from TMDB API."""
+        # Date for movies from the last 30 years
         end_date = datetime.now()
-        start_date = end_date - timedelta(days=365 * 30)  # 30 Jahre
+        start_date = end_date - timedelta(days=365 * 30)  # 30 years
 
         url = f"{self.base_url}/discover/movie"
         params = {
             'api_key': self.tmdb_api_key,
             'primary_release_date.gte': start_date.strftime('%Y-%m-%d'),
             'primary_release_date.lte': end_date.strftime('%Y-%m-%d'),
-            'sort_by': 'popularity.desc',  # Nach Popularität sortieren
+            'sort_by': 'popularity.desc',  # Sort by popularity
             'language': 'de-DE',
             'region': 'DE',
-            'with_release_type': '2|3',  # Theater und Digital
-            'vote_average.gte': 1,  # Mindestens 1 Stern
+            'with_release_type': '2|3',  # Theater and Digital
+            'vote_average.gte': 1,  # At least 1 star
             'include_adult': 'false',
             'page': 1
         }
 
         all_movies = []
         try:
-            # Hole bis zu 50 Seiten von Ergebnissen für deutlich mehr Filme
+            # Fetch up to 50 pages of results for significantly more movies
             for page in range(1, 51):
                 params['page'] = page
-                response = requests.get(url, params=params, timeout=15)  # Timeout auf 15s erhöht
+                response = requests.get(url, params=params, timeout=15)  # Increased timeout to 15s
                 response.raise_for_status()
 
                 if response.status_code == 200:
                     data = response.json()
                     results = data.get('results', [])
-                    print(f"Seite {page}: {len(results)} Filme gefunden")
-                    if not results:  # Wenn keine Ergebnisse mehr, beende die Schleife
+                    print(f"Page {page}: {len(results)} movies found")
+                    if not results:  # If no more results, exit the loop
                         break
                     all_movies.extend(results)
                 else:
-                    print(f"Fehler bei Seite {page}: Status {response.status_code}")
+                    print(f"Error on page {page}: Status {response.status_code}")
 
-            # Entferne Duplikate basierend auf normalisierten Titeln
+            # Remove duplicates based on normalized titles
             unique_movies = {}
             for movie in all_movies:
-                if not movie.get('title'):  # Überspringe Einträge ohne Titel
+                if not movie.get('title'):  # Skip entries without a title
                     continue
 
-                # Bereinige und normalisiere den Titel
+                # Clean and normalize the title
                 clean_title = self.clean_title(movie['title'])
                 norm_title = self.normalize_title(clean_title)
 
@@ -109,29 +111,29 @@ class MovieUpdateService:
                     unique_movies[norm_title] = movie
                     self._processed_titles.add(norm_title)
 
-            print(f"Insgesamt gefundene Filme: {len(unique_movies)}")
+            print(f"Total unique movies found: {len(unique_movies)}")
             return list(unique_movies.values())
 
         except requests.exceptions.RequestException as e:
-            print(f"Fehler beim API-Aufruf: {e}")
+            print(f"Error fetching movies: {e}")
             return []
 
     def is_similar_title(self, title1: str, title2: str, threshold: float = 0.9) -> bool:
-        """Überprüft ob zwei Titel ähnlich sind"""
+        """Check if two titles are similar."""
         from difflib import SequenceMatcher
 
-        # Bereinige und normalisiere beide Titel
+        # Clean and normalize both titles
         clean1 = self.clean_title(title1)
         clean2 = self.clean_title(title2)
         norm1 = self.normalize_title(clean1)
         norm2 = self.normalize_title(clean2)
 
-        # Berechne die Ähnlichkeit
+        # Calculate the similarity
         similarity = SequenceMatcher(None, norm1, norm2).ratio()
         return similarity >= threshold
 
     def get_actors_from_omdb(self, title: str) -> List[Dict]:
-        """Hole Schauspieler von OMDB API"""
+        """Fetch actors from OMDB API."""
         try:
             params = {
                 'apikey': self.omdb_api_key,
@@ -149,19 +151,19 @@ class MovieUpdateService:
                     if actor_name:
                         actors.append({
                             'name': actor_name,
-                            'role_name': ''  # OMDB gibt keine Rolleninformationen
+                            'role_name': ''  # OMDB does not provide role information
                         })
                 return actors
             return []
         except Exception as e:
-            print(f"Fehler beim Abrufen der Schauspieler von OMDB: {e}")
+            print(f"Error fetching actors from OMDB: {e}")
             return []
 
     def update_movie_database(self) -> int:
         """
-        Aktualisiert die Filmdatenbank mit neuen Filmen.
+        Update the movie database with new movies.
         Returns:
-            int: Anzahl der hinzugefügten Filme
+            int: Number of movies added
         """
         if (self._last_update and
             datetime.now() - self._last_update < self._update_interval):
@@ -173,20 +175,20 @@ class MovieUpdateService:
         with self.data_manager.SessionFactory() as session:
             try:
                 for movie_data in new_movies:
-                    # Überprüfe, ob der Film bereits existiert
+                    # Check if the movie already exists
                     existing_movie = session.query(Movie).filter_by(
                         title=movie_data['title']
                     ).first()
 
                     if not existing_movie:
-                        # Hole zusätzliche Details von OMDB
+                        # Fetch additional details from OMDB
                         try:
                             omdb_data = self.get_movie_details_from_omdb(movie_data['title'])
                         except Exception as e:
-                            print(f"OMDB API Fehler für {movie_data['title']}: {e}")
+                            print(f"OMDB API error for {movie_data['title']}: {e}")
                             omdb_data = {}
 
-                        # Erstelle einen neuen Film
+                        # Create a new movie
                         try:
                             release_date = datetime.strptime(
                                 movie_data.get('release_date', ''),
@@ -195,7 +197,7 @@ class MovieUpdateService:
                         except ValueError:
                             release_date = None
 
-                        # Sichere Konvertierung der IMDB-Bewertung
+                        # Safe conversion of IMDB rating
                         try:
                             imdb_rating = omdb_data.get('imdbRating', '0')
                             rating = float(imdb_rating) if imdb_rating and imdb_rating != 'N/A' else 0.0
@@ -212,12 +214,12 @@ class MovieUpdateService:
                             director=omdb_data.get('Director', '') if omdb_data.get('Director') != 'N/A' else ''
                         )
                         session.add(movie)
-                        session.flush()  # Damit wir die movie.id haben
+                        session.flush()  # So we have the movie.id
 
-                        # Hole und füge Schauspieler hinzu
+                        # Fetch and add actors
                         actors = self.get_actors_from_omdb(movie_data['title'])
                         for actor_data in actors:
-                            # Prüfe ob Schauspieler bereits existiert
+                            # Check if actor already exists
                             actor = session.query(Actor).filter_by(
                                 name=actor_data['name']
                             ).first()
@@ -227,7 +229,7 @@ class MovieUpdateService:
                                 session.add(actor)
                                 session.flush()
 
-                            # Verknüpfe Film und Schauspieler
+                            # Link movie and actor
                             movie_actor = MovieActor(
                                 movie_id=movie.id,
                                 actor_id=actor.id,
@@ -235,21 +237,21 @@ class MovieUpdateService:
                             )
                             session.add(movie_actor)
 
-                        print(f"Film hinzugefügt: {movie.title}")
+                        print(f"Movie added: {movie.title}")
                         added_count += 1
 
                 session.commit()
                 self._last_update = datetime.now()
-                print(f"Erfolgreich {added_count} neue Filme hinzugefügt")
+                print(f"Successfully added {added_count} new movies")
                 return added_count
 
             except Exception as e:
-                print(f"Fehler beim Aktualisieren der Filmdatenbank: {e}")
+                print(f"Error updating movie database: {e}")
                 session.rollback()
                 return 0
 
     def get_movie_details_from_omdb(self, title: str) -> dict:
-        """Hole detaillierte Filminformationen von OMDB"""
+        """Fetch detailed movie information from OMDB."""
         try:
             params = {
                 'apikey': self.omdb_api_key,
@@ -262,17 +264,17 @@ class MovieUpdateService:
             data = response.json()
             if data.get('Response') == 'True':
                 return data
-            print(f"Keine OMDB-Daten gefunden für: {title}")
+            print(f"No OMDB data found for: {title}")
             return {}
         except Exception as e:
-            print(f"Fehler beim Abrufen der OMDB-Details für {title}: {e}")
+            print(f"Error fetching OMDB details for {title}: {e}")
             return {}
 
     def add_movie(self, title: str) -> Movie:
-        """Fügt einen einzelnen Film manuell hinzu"""
+        """Manually add a single movie."""
         with self.data_manager.SessionFactory() as session:
             try:
-                # Prüfe ob der Film bereits existiert
+                # Check if the movie already exists
                 existing_movie = session.query(Movie).filter(
                     Movie.title.ilike(f"%{title}%")
                 ).first()
@@ -280,16 +282,16 @@ class MovieUpdateService:
                 if existing_movie:
                     return existing_movie
 
-                # Hole Filmdaten von OMDB
+                # Fetch movie data from OMDB
                 movie_data = self.get_movie_details_from_omdb(title)
                 if not movie_data:
                     return None
 
-                # Sichere Konvertierung der Werte
+                # Safe conversion of values
                 year = int(movie_data.get('Year', '0').split('–')[0]) if movie_data.get('Year', 'N/A') != 'N/A' else None
                 rating = float(movie_data.get('imdbRating', '0')) if movie_data.get('imdbRating', 'N/A') != 'N/A' else None
 
-                # Erstelle neuen Film
+                # Create new movie
                 new_movie = Movie(
                     title=movie_data.get('Title', title),
                     description=movie_data.get('Plot', ''),
@@ -308,5 +310,58 @@ class MovieUpdateService:
 
             except Exception as e:
                 session.rollback()
-                print(f"Fehler beim Hinzufügen von {title}: {str(e)}")
+                print(f"Error adding {title}: {str(e)}")
                 return None
+
+    def validate_movie_data(self, movie_data: Dict) -> bool:
+        """Validate movie data before saving."""
+        try:
+            # Validate title
+            title = movie_data.get('title', '').strip()
+            if not title or len(title) < 2:
+                return False
+
+            # Validate and correct rating
+            rating = movie_data.get('rating', 0)
+            if isinstance(rating, (int, float)):
+                if rating > 10:  # Correct broken ratings
+                    rating = rating / 1000000 if rating > 1000000 else min(rating / 100, 10)
+                rating = max(0, min(rating, 10))  # Between 0 and 10
+                movie_data['rating'] = round(rating, 1)
+            else:
+                movie_data['rating'] = 0.0
+
+            # Validate release year
+            year = movie_data.get('release_year')
+            if year:
+                try:
+                    year = int(year)
+                    if year < 1900 or year > 2030:
+                        movie_data['release_year'] = None
+                except (ValueError, TypeError):
+                    movie_data['release_year'] = None
+
+            # Validate poster URL
+            poster_url = movie_data.get('poster_url', '')
+            if poster_url and not poster_url.startswith(('http://', 'https://')):
+                movie_data['poster_url'] = None
+
+            return True
+
+        except Exception as e:
+            print(f"Error in data validation: {str(e)}")
+            return False
+
+    def check_for_duplicates(self, title: str, year: int = None) -> bool:
+        """Check for duplicate movies in the database."""
+        try:
+            with self.data_manager.SessionFactory() as session:
+                query = session.query(Movie).filter(Movie.title.ilike(f"%{title}%"))
+                if year:
+                    query = query.filter(Movie.release_year == year)
+
+                existing = query.first()
+                return existing is not None
+        except Exception as e:
+            print(f"Error checking for duplicates: {str(e)}")
+            return False

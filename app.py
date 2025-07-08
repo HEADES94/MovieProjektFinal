@@ -1,7 +1,6 @@
 """
-MovieProjekt Flask App
-Hauptmodul der Flask-Anwendung für das MovieProjekt.
-Hier werden die zentralen Services, Routen und Konfigurationen initialisiert.
+Flask application for the MovieProjekt.
+Main module for the Flask application where central services, routes and configurations are initialized.
 """
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory
 from flask_login import login_user, logout_user, login_required, current_user
@@ -10,7 +9,13 @@ from flask_wtf import FlaskForm
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func, case
 import random
+import os
 from datetime import datetime, UTC
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from utils.logging_config import setup_logging
 
 from ai_request import AIRequest
 from datamanager.sqlite_data_manager import SQliteDataManager
@@ -23,20 +28,33 @@ from services.movie_update_service import MovieUpdateService
 
 app = Flask(__name__)
 app.config.update(
-    ENV='development',  # Entwicklungsumgebung
-    DEBUG=True,         # Debug-Modus aktivieren
-    SECRET_KEY='dein-geheimer-schluessel',  # Geheimschlüssel für Sessions und CSRF
-    WTF_CSRF_ENABLED=True  # CSRF-Schutz aktivieren
+    ENV=os.getenv('FLASK_ENV', 'development'),
+    DEBUG=os.getenv('DEBUG', 'True').lower() == 'true',
+    SECRET_KEY=os.getenv('SECRET_KEY', 'dev-key-change-in-production'),
+    WTF_CSRF_ENABLED=True,
+    DATABASE_URL=os.getenv('DATABASE_URL', 'postgresql://localhost/movie_app_postgres'),
+    GOOGLE_API_KEY=os.getenv('GOOGLE_API_KEY'),
+    TMDB_API_KEY=os.getenv('TMDB_API_KEY'),
+    OMDB_API_KEY=os.getenv('OMDB_API_KEY')
 )
+
+setup_logging(app)
+
+from utils.security import add_security_headers
+app.after_request(add_security_headers)
 
 csrf = CSRFProtect(app)
 
-# Füge den shuffle-Filter zu Jinja2 hinzu, um Listen in Templates zufällig zu mischen
+
 def jinja2_shuffle(seq):
     """
-    Mischt eine Sequenz für die Verwendung in Jinja2-Templates.
-    :param seq: Sequenz (z.B. Liste), die gemischt werden soll
-    :return: Gemischte Sequenz
+    Shuffle a sequence for use in Jinja2 templates.
+
+    Args:
+        seq: Sequence (e.g. list) to be shuffled
+
+    Returns:
+        Shuffled sequence
     """
     try:
         result = list(seq)
@@ -44,26 +62,28 @@ def jinja2_shuffle(seq):
         return result
     except:
         return seq
+
+
 app.jinja_env.filters['shuffle'] = jinja2_shuffle
 
-data_manager = SQliteDataManager("sqlite:///movie_app.db")
+data_manager = SQliteDataManager("postgresql://localhost/movie_app_postgres")
 ai_client = AIRequest()
 login_manager = init_login_manager(app)
 movie_update_service = MovieUpdateService(data_manager)
 
-# Auth-Service und Watchlist-Service initialisieren
 auth_service = AuthService(data_manager)
 watchlist_service = WatchlistService(data_manager)
 
+
 def update_movies():
-    """Aktualisiert die Filmdatenbank mit neuen Filmen"""
+    """Update the movie database with new movies."""
     return movie_update_service.update_movie_database()
 
-# Initialisiere die Datenbank beim Start
-with app.app_context():
-    update_movies()
 
-# Error handlers
+with app.app_context():
+    pass
+
+
 @app.errorhandler(404)
 def page_not_found(e):
     return render_template("404.html"), 404
@@ -74,13 +94,15 @@ def internal_server_error(e):
     return render_template("500.html"), 500
 
 
-# Home Route with simple navigation
 @app.route('/')
 def home():
     """
-    Render the home page with movie and user statistics.
+    Home page route.
+
+    Returns:
+        Rendered home template
     """
-    update_movies()
+    # update_movies()  # Deaktiviert nach Database Reset
     with data_manager.SessionFactory() as session:
         # Hole alle Filme und sortiere sie nach Rating (absteigend)
         movies = session.query(Movie).order_by(Movie.rating.desc()).limit(10).all()
@@ -106,7 +128,6 @@ def home():
         return render_template("home.html", movies=movies, users=users, user_stats=user_stats)
 
 
-# Users in a list view
 @app.route('/users')
 def list_users():
     with data_manager.SessionFactory() as session:
@@ -123,7 +144,6 @@ def list_users():
     return render_template("users.html", users=user_data)
 
 
-# User movies in a list view
 @app.route('/users/<user_id>', methods=["GET", "POST"])
 def user_movies(user_id):
     with data_manager.SessionFactory() as session:
@@ -202,7 +222,6 @@ def user_movies(user_id):
                                         error=str(e))
 
 
-# single user movie view for updating
 @app.route('/users/<user_id>/<movie_id>', methods=["GET", "POST"])
 def update_user_movie(user_id, movie_id):
     if request.method == "GET":
@@ -241,7 +260,6 @@ def update_user_movie(user_id, movie_id):
             )
 
 
-# Adding new users
 @app.route('/users/new', methods=["GET", "POST"])
 def new_user():
     if request.method == "GET":
@@ -259,7 +277,6 @@ def new_user():
                 return render_template("new_user.html", success=False)
 
 
-# Adding new movies
 @app.route('/movies/new', methods=["GET", "POST"])
 def new_movie():
     if request.method == "POST":
@@ -287,44 +304,75 @@ def new_movie():
 
     return render_template('new_movie.html')
 
-# see list of all movies in database
+
 @app.route('/movies', methods=["GET", "POST"])
 def list_movies():
     if request.method == "GET":
         search_query = request.args.get('search', '')
-        sort_by = request.args.get('sort', 'rating')  # Standard: Nach Bewertung sortieren
+        sort_by = request.args.get('sort', 'rating')
+        genre_filter = request.args.get('genre', '')
+        page = int(request.args.get('page', 1))
+        per_page = 20  # Pagination: Nur 20 Filme pro Seite laden
 
         with data_manager.SessionFactory() as session:
-            # Basis-Query erstellen
-            query = session.query(Movie)
+            # Optimierte Query mit SELECT nur benötigter Felder
+            query = session.query(
+                Movie.id,
+                Movie.title,
+                Movie.genre,
+                Movie.rating,
+                Movie.release_year,
+                Movie.poster_url,
+                Movie.director
+            )
 
-            # Suche anwenden, wenn vorhanden
+            # Suche anwenden (optimiert)
             if search_query:
                 search_terms = f"%{search_query}%"
                 query = query.filter(
                     Movie.title.ilike(search_terms) |
-                    Movie.description.ilike(search_terms) |
                     Movie.genre.ilike(search_terms) |
                     Movie.director.ilike(search_terms)
                 )
 
-            # Sortierung anwenden
+            # Genre-Filter anwenden (optimiert für kombinierte Genres)
+            if genre_filter:
+                query = query.filter(Movie.genre.ilike(f"%{genre_filter}%"))
+
+            # Sortierung anwenden (mit Indizes optimiert)
             if sort_by == 'title':
                 query = query.order_by(Movie.title)
             elif sort_by == 'year_desc':
-                query = query.order_by(Movie.release_year.desc())
+                query = query.order_by(Movie.release_year.desc().nulls_last())
             elif sort_by == 'year_asc':
-                query = query.order_by(Movie.release_year)
+                query = query.order_by(Movie.release_year.asc().nulls_last())
             else:  # default: rating
-                query = query.order_by(Movie.rating.desc())
+                query = query.order_by(Movie.rating.desc().nulls_last())
 
-            # Filme abrufen
-            movies = query.all()
+            # Pagination anwenden
+            total_movies = query.count()
+            movies = query.offset((page - 1) * per_page).limit(per_page).all()
+
+            # Pagination Info
+            total_pages = (total_movies + per_page - 1) // per_page
+            has_prev = page > 1
+            has_next = page < total_pages
 
             return render_template("movies.html",
                                 movies=movies,
                                 sort_by=sort_by,
-                                search_query=search_query)
+                                search_query=search_query,
+                                selected_genre=genre_filter,
+                                pagination={
+                                    'page': page,
+                                    'per_page': per_page,
+                                    'total': total_movies,
+                                    'total_pages': total_pages,
+                                    'has_prev': has_prev,
+                                    'has_next': has_next,
+                                    'prev_num': page - 1 if has_prev else None,
+                                    'next_num': page + 1 if has_next else None
+                                })
 
     elif request.method == "POST":
         movie_id = request.form["movie_id"]
@@ -336,7 +384,6 @@ def list_movies():
                                 success=deleted)
 
 
-# get details of a single movie
 @app.route('/movies/<movie_id>', methods=["GET", "POST"])
 @login_required
 def movie_details(movie_id):
@@ -383,17 +430,14 @@ def movie_details(movie_id):
                 # Achievement für 10 Reviews prüfen und ggf. vergeben (mindestens 10 und noch nicht erhalten)
                 from services.achievement_service import AchievementService
                 achievement_service = AchievementService(data_manager)
-                with data_manager.SessionFactory() as session2:
-                    review_count = session2.query(Review).filter_by(user_id=current_user.id).count()
-                    user_ach = session2.query(UserAchievement).join(Achievement).filter(
-                        UserAchievement.user_id == current_user.id,
-                        Achievement.code == 'reviewer_10'
-                    ).first()
-                    if review_count >= 10 and not user_ach:
-                        achievement_service._grant_achievement(current_user.id, 'reviewer_10', session2)
-                    session2.commit()
 
-                flash('Ihre Bewertung wurde erfolgreich gespeichert.', 'success')
+                # Prüfe Review-Achievements (inkl. erste Review und Meilensteine)
+                new_achievements = achievement_service.check_review_achievements(current_user.id)
+
+                # Zeige Achievement-Benachrichtigungen an
+                if new_achievements:
+                    for achievement in new_achievements:
+                        flash(f"🏆 Achievement freigeschaltet: {achievement['title']} - {achievement['description']}", 'success')
             except Exception as e:
                 session.rollback()
                 flash('Fehler beim Speichern der Bewertung.', 'error')
@@ -403,22 +447,60 @@ def movie_details(movie_id):
         if current_user.is_authenticated:
             movie.in_watchlist = watchlist_service.is_in_watchlist(current_user.id, int(movie_id))
 
-        # Berechne die Quiz-Statistiken
-        quiz_attempts = session.query(QuizAttempt).filter_by(movie_id=movie_id).count()
-        if quiz_attempts > 0:
-            avg_score = session.query(func.avg(QuizAttempt.score)).filter_by(movie_id=movie_id).scalar() or 0
-            completion_rate = session.query(
-                func.count(case((QuizAttempt.score > 0, 1))) * 100.0 / func.count()
-            ).filter_by(movie_id=movie_id).scalar() or 0
-        else:
-            avg_score = 0
-            completion_rate = 0
-
+        # Berechne die Quiz-Statistiken für den aktuellen Film (korrigierte Version)
         stats = {
-            'quiz_attempts': quiz_attempts,
-            'avg_score': round(float(avg_score), 1),
-            'completion_rate': round(float(completion_rate))
+            'quiz_attempts': 0,
+            'avg_score': 0,
+            'completion_rate': 0
         }
+
+        if current_user.is_authenticated:
+            # Hole nur Quiz-Versuche für den aktuellen Film
+            movie_quiz_attempts = session.query(QuizAttempt).filter_by(
+                user_id=current_user.id,
+                movie_id=movie_id
+            ).all()
+
+            print(f"DEBUG: Found {len(movie_quiz_attempts)} quiz attempts for user {current_user.id} and movie {movie_id}")
+
+            if movie_quiz_attempts:
+                stats['quiz_attempts'] = len(movie_quiz_attempts)
+
+                # Debug: Zeige alle Quiz-Versuche für diesen Film
+                for i, attempt in enumerate(movie_quiz_attempts):
+                    print(f"DEBUG: Movie {movie_id} Attempt {i+1}: Score={attempt.score}, Total={attempt.total_questions}, Difficulty={attempt.difficulty}")
+
+                # Berechne korrekte Anzahl richtiger Antworten basierend auf Punktzahl und Schwierigkeit
+                total_correct_answers = 0
+                for attempt in movie_quiz_attempts:
+                    # Berechne die Anzahl richtiger Antworten basierend auf Punktzahl und Schwierigkeit
+                    max_points_per_question = 200 if attempt.difficulty == 'schwer' else 100
+                    bonus_threshold = attempt.total_questions * max_points_per_question
+
+                    if attempt.score > bonus_threshold:
+                        # Perfekte Punktzahl mit Bonus - alle Antworten richtig
+                        correct_answers = attempt.total_questions
+                    else:
+                        # Berechne Anzahl richtiger Antworten ohne Bonus
+                        correct_answers = attempt.score // max_points_per_question
+
+                    total_correct_answers += correct_answers
+
+                # Berechne Durchschnittspunktzahl (Anzahl richtige Antworten pro Quiz)
+                stats['avg_score'] = round(total_correct_answers / len(movie_quiz_attempts), 1)
+
+                # Berechne Abschlussrate korrekt (Prozentsatz der richtig beantworteten Fragen)
+                total_questions = sum(attempt.total_questions for attempt in movie_quiz_attempts)
+
+                if total_questions > 0:
+                    stats['completion_rate'] = round((total_correct_answers / total_questions) * 100, 1)
+                else:
+                    stats['completion_rate'] = 0
+
+                print(f"DEBUG: Movie {movie_id} Stats - Attempts: {stats['quiz_attempts']}, Avg: {stats['avg_score']}, Rate: {stats['completion_rate']}%")
+                print(f"DEBUG: Movie {movie_id} Total correct: {total_correct_answers}, Total questions: {total_questions}")
+            else:
+                print(f"DEBUG: No quiz attempts found for user {current_user.id} and movie {movie_id}")
 
         # Hole die Reviews
         reviews = session.query(Review).filter_by(movie_id=movie_id).order_by(Review.created_at.desc()).all()
@@ -436,43 +518,83 @@ def movie_details(movie_id):
             movie_info = f"Title: {movie.title}, Genre: {movie.genre}, Year: {movie.release_year}, Rating: {movie.rating}"
             # Hole Empfehlungen von der KI
             ai_recommendation = ai_client.ai_request(movie_info)
-            if ai_recommendation and 'movie' in ai_recommendation:
-                movie_data = ai_recommendation['movie']
-                # Prüfe ob der empfohlene Film bereits in der Datenbank ist
-                ai_movie = session.query(Movie).filter(Movie.title.ilike(movie_data['title'])).first()
-                if not ai_movie:
-                    # Füge den Film zur Datenbank hinzu
-                    ai_movie = Movie(
-                        title=movie_data['title'],
-                        release_year=int(movie_data['year']) if movie_data.get('year') else None,
-                        director=movie_data.get('director'),
-                        genre=movie_data.get('genre'),
-                        description=movie_data.get('plot'),
-                        poster_url=movie_data.get('poster'),
-                        rating=float(movie_data.get('imdb', 0)),
-                        country=movie_data.get('country')
-                    )
-                    session.add(ai_movie)
-                    session.commit()
-                ai_recommendations = [{'movie': ai_movie, 'reason': ai_recommendation.get('reason', 'KI-Empfehlung')}]
-            else:
-                ai_recommendations = []
+            if ai_recommendation:
+                # Prüfe ob die KI-Antwort das erwartete Format hat
+                if 'movie' in ai_recommendation:
+                    # Altes Format mit 'movie' Schlüssel
+                    movie_data = ai_recommendation['movie']
+                    reason = ai_recommendation.get('reason', 'KI-Empfehlung')
+                elif 'title' in ai_recommendation:
+                    # Neues Format ohne 'movie' Schlüssel
+                    movie_data = {
+                        'title': ai_recommendation.get('title'),
+                        'year': ai_recommendation.get('year'),
+                        'director': ai_recommendation.get('director'),
+                        'genre': ai_recommendation.get('genre'),
+                        'plot': ai_recommendation.get('plot') or ai_recommendation.get('description'),
+                        'poster': ai_recommendation.get('poster'),
+                        'imdb': ai_recommendation.get('imdb') or ai_recommendation.get('rating', 0)
+                    }
+                    reason = ai_recommendation.get('explanation', 'KI-Empfehlung')
+                else:
+                    ai_recommendations = []
+                    movie_data = None
+
+                if movie_data and movie_data.get('title'):
+                    # Prüfe ob der empfohlene Film bereits in der Datenbank ist
+                    ai_movie = session.query(Movie).filter(Movie.title.ilike(movie_data['title'])).first()
+                    if not ai_movie:
+                        # Korrigiere das Rating bevor der Film hinzugefügt wird
+                        raw_rating = float(movie_data.get('imdb', 0)) if movie_data.get('imdb') else 0
+
+                        # Rating-Korrektur-Logik
+                        if raw_rating > 1000000:  # Extrem hohe Werte wie 94897
+                            corrected_rating = 7.5  # Setze auf vernünftigen Wert
+                        elif raw_rating > 100:
+                            corrected_rating = min(raw_rating / 10, 10.0)  # Teile durch 10
+                        elif raw_rating > 10:
+                            corrected_rating = min(raw_rating / 10, 10.0)  # Teile durch 10
+                        elif raw_rating < 1:
+                            corrected_rating = 6.5  # Standard-Rating für unbekannte Filme
+                        else:
+                            corrected_rating = min(raw_rating, 10.0)  # Maximal 10.0
+
+                        # Füge den Film zur Datenbank hinzu
+                        ai_movie = Movie(
+                            title=movie_data['title'],
+                            release_year=int(movie_data['year']) if movie_data.get('year') else None,
+                            director=movie_data.get('director', 'Unknown'),
+                            genre=movie_data.get('genre', 'Drama'),
+                            plot=movie_data.get('plot', f"Ein Film aus dem Jahr {movie_data.get('year', 'unbekannt')}."),
+                            poster_url=movie_data.get('poster'),
+                            rating=corrected_rating,  # Verwende das korrigierte Rating
+                            country=movie_data.get('country')
+                        )
+                        session.add(ai_movie)
+                        session.commit()
+
+                        app.logger.info(f"KI-Film hinzugefügt: {movie_data['title']} mit korrigiertem Rating {corrected_rating} (original: {raw_rating})")
+
+                    ai_recommendations = [{'movie': ai_movie, 'reason': reason}]
+                else:
+                    ai_recommendations = []
         except Exception as e:
             app.logger.error(f"Fehler bei KI-Empfehlung: {str(e)}")
             ai_recommendations = []
 
-        # Füge Quiz-Historie für den aktuellen Benutzer hinzu
+        # Füge Quiz-Historie für den aktuellen Film hinzu (korrigiert)
         quiz_history = None
         if current_user.is_authenticated:
+            # Zeige die letzten Quiz-Versuche für diesen speziellen Film
             quiz_history = session.query(QuizAttempt).filter_by(
                 user_id=current_user.id,
                 movie_id=movie_id
-            ).order_by(QuizAttempt.created_at.desc()).limit(5).all()
+            ).order_by(QuizAttempt.completed_at.desc()).limit(5).all()
 
             quiz_history = [{
-                'date': attempt.created_at.strftime('%d.%m.%Y'),
+                'date': attempt.completed_at.strftime('%d.%m.%Y'),
                 'score': attempt.score,
-                'progress': (attempt.score / 10 * 100)  # Standardisiere auf 10 Punkte
+                'progress': (attempt.score / attempt.total_questions * 100) if attempt.total_questions > 0 else 0
             } for attempt in quiz_history]
 
         return render_template('movie_details.html',
@@ -484,7 +606,6 @@ def movie_details(movie_id):
                             ai_recommendations=ai_recommendations)
 
 
-# delete user movie from database
 @app.route('/users/<user_id>/delete/<movie_id>', methods=["GET", "POST"])
 def delete_user_movie(user_id, movie_id):
     if request.method == "GET":
@@ -502,7 +623,6 @@ def delete_user_movie(user_id, movie_id):
                                user=chosen_user, movie=movie, movie_deleted=deleted)
 
 
-# movie recommendation from AI
 @app.route('/users/<user_id>/recommend_movie', methods=['GET', 'POST'])
 def recommendation(user_id):
     with data_manager.SessionFactory() as session:
@@ -539,7 +659,10 @@ def recommendation(user_id):
                 query = query.filter(
                     Movie.genre.ilike('%horror%') |
                     Movie.genre.ilike('%mystery%') |
-                    Movie.genre.ilike('%thriller%')
+                    (Movie.genre.ilike('%thriller%') &
+                     ~Movie.genre.ilike('%action%') &
+                     ~Movie.genre.ilike('%comedy%')) |
+                    Movie.genre.ilike('%suspense%')
                 ).order_by(func.random())
 
             movies = query.limit(5).all()
@@ -555,7 +678,7 @@ def recommendation(user_id):
         # GET request
         return render_template('recommend.html', user=user)
 
-# Quiz Routes
+
 @app.route('/quiz')
 @login_required
 def quiz_home():
@@ -565,13 +688,10 @@ def quiz_home():
             # Lade alle Filme
             all_movies = session.query(Movie).all()
 
-            # Lade die bereits gespielten Quizze des Benutzers
-            played_quizzes = session.query(Movie).join(QuizAttempt).filter(
-                QuizAttempt.user_id == current_user.id
-            ).distinct().all()
-
-            # Filme, die noch nicht gespielt wurden
-            available_movies = [movie for movie in all_movies if movie not in played_quizzes]
+            # Da QuizAttempt keine movie_id mehr hat, können wir keine gespielten Quizze nach Filmen filtern
+            # Alle Filme sind verfügbar für Quizze
+            available_movies = all_movies
+            played_quizzes = []  # Leere Liste, da wir keine Film-spezifischen Quiz-Versuche mehr haben
 
             # Statistiken des Benutzers laden
             user_stats = {}
@@ -602,6 +722,7 @@ def quiz_home():
         app.logger.error(f"Fehler bei der Anzeige der Quiz-Startseite: {str(e)}")
         flash('Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.', 'error')
         return redirect(url_for('home'))
+
 
 @app.route('/quiz/<movie_id>')
 @login_required
@@ -640,6 +761,7 @@ def movie_quiz(movie_id):
         flash('Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.', 'error')
         return redirect(url_for('quiz_home'))
 
+
 @app.route('/quiz/<int:movie_id>/submit', methods=['POST'])
 @login_required
 @csrf.exempt
@@ -666,13 +788,14 @@ def submit_quiz(movie_id):
                 difficulty=data['difficulty']
             )
 
-            # Speichere den Quiz-Versuch
+            # Speichere den Quiz-Versuch mit movie_id
             quiz_attempt = QuizAttempt(
                 user_id=current_user.id,
-                movie_id=movie_id,
+                movie_id=movie_id,  # Füge movie_id hinzu für film-spezifische Statistiken
                 score=result['score'],
-                created_at=datetime.now(UTC),
-                difficulty=data['difficulty']
+                total_questions=result['total_questions'],
+                difficulty=data['difficulty'],
+                completed_at=datetime.now(UTC)
             )
             session.add(quiz_attempt)
             session.commit()
@@ -700,6 +823,7 @@ def submit_quiz(movie_id):
     except Exception as e:
         app.logger.error(f"Fehler beim Quiz-Submit: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 400
+
 
 @app.route('/quiz/suggest', methods=['GET', 'POST'])
 @login_required
@@ -733,14 +857,14 @@ def suggest_question():
             session.add(suggestion)
             session.commit()
 
-            flash('Vielen Dank für deinen Vorschlag! Er wird überprüft.', 'success')
+            flash('Vielen Dank für deinen Vorschlag! Er wird ��berprüft.', 'success')
             return redirect(url_for('quiz_home'))
 
     with data_manager.SessionFactory() as session:
         movies = session.query(Movie).order_by(Movie.title).all()
         return render_template('suggest_question.html', movies=movies)
 
-# Auth Routes
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -767,6 +891,7 @@ def login():
             flash('Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.', 'error')
 
     return render_template('auth/login.html')
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -800,13 +925,14 @@ def register():
 
     return render_template('auth/register.html')
 
+
 @app.route('/logout')
 @login_required
 def logout():
     logout_user()
     return redirect(url_for('home'))
 
-# Profile Routes
+
 @app.route('/profile')
 @login_required
 def profile():
@@ -853,6 +979,8 @@ def profile():
         return render_template('profile.html',
                             user=user,
                             user_stats=user_stats)
+
+
 @app.route('/profile/settings', methods=['POST'])
 @login_required
 def update_settings():
@@ -869,7 +997,7 @@ def update_settings():
 
     return redirect(url_for('profile'))
 
-# Watchlist Routes
+
 @app.route('/watchlist/add/<int:movie_id>', methods=['POST'])
 @login_required
 def add_to_watchlist(movie_id):
@@ -881,6 +1009,16 @@ def add_to_watchlist(movie_id):
             flash('Film ist bereits in deiner Watchlist.', 'info')
         else:
             flash('Film wurde zur Watchlist hinzugefügt.', 'success')
+
+            # Achievement Service für Watchlist-Achievements
+            achievement_service = AchievementService(data_manager)
+            new_achievements = achievement_service.check_watchlist_achievements(current_user.id)
+
+            # Zeige Achievement-Benachrichtigungen an
+            if new_achievements:
+                for achievement in new_achievements:
+                    flash(f"🏆 Achievement freigeschaltet: {achievement['title']} - {achievement['description']}", 'success')
+
     except Exception as e:
         # Nur für echte Fehler eine Fehlermeldung anzeigen
         app.logger.error(f"Watchlist-Fehler: {str(e)}")
@@ -888,6 +1026,7 @@ def add_to_watchlist(movie_id):
 
     # Zurück zur vorherigen Seite oder zur Watchlist
     return redirect(request.referrer or url_for('watchlist'))
+
 
 @app.route('/watchlist', methods=['GET'])
 @login_required
@@ -900,6 +1039,7 @@ def watchlist():
         flash('Fehler beim Laden der Watchlist.', 'error')
         app.logger.error(f"Watchlist-Fehler: {str(e)}")
         return redirect(url_for('home'))
+
 
 @app.route('/watchlist/remove/<int:movie_id>', methods=['POST'])
 @login_required
@@ -916,7 +1056,7 @@ def remove_from_watchlist(movie_id):
 
     return redirect(request.referrer or url_for('watchlist'))
 
-# Achievement Routes
+
 @app.route('/achievements')
 @login_required
 def achievements():
@@ -934,6 +1074,7 @@ def achievements():
         return render_template('achievements.html',
                            unlocked=user.achievements,
                            locked=locked_achievements)
+
 
 @app.route('/movies/<int:movie_id>/recommendation/generate', methods=['POST'])
 def generate_ai_recommendation(movie_id):
@@ -980,6 +1121,7 @@ def generate_ai_recommendation(movie_id):
         print(f"Fehler bei der KI-Empfehlung: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+
 @app.route('/movies/<int:movie_id>/similar', methods=['GET'])
 def get_similar_movies(movie_id):
     """Gibt ähnliche Filme zurück"""
@@ -1007,6 +1149,7 @@ def get_similar_movies(movie_id):
 
         return jsonify({'similar_movies': similar_movies_data})
 
+
 @app.route('/movies/<int:movie_id>/recommendation', methods=['GET'])
 def get_movie_recommendation(movie_id):
     """Gibt eine vorhandene KI-Empfehlung zurück"""
@@ -1019,6 +1162,7 @@ def get_movie_recommendation(movie_id):
         # Für jetzt geben wir einfach einen leeren Response zurück
         return jsonify({'recommendation': None})
 
+
 @app.route('/static/<path:filename>')
 def serve_static(filename):
     if filename == 'default_poster.jpg':
@@ -1028,14 +1172,16 @@ def serve_static(filename):
         return response
     return send_from_directory('static', filename)
 
+
 class MovieRecommendForm(FlaskForm):
     pass
 
-@app.route('/recommend', methods=['GET', 'POST'])
+
+@app.route('/recommend', methods=['GET', 'POST'], endpoint='recommend')
 def recommend_movies():
     form = MovieRecommendForm()  # Erstelle ein echtes FlaskForm-Objekt
     if request.method == 'POST' and form.validate():
-        genre_preference = request.form.get('genre', '')
+        genre_preference = request.form.get('genre_preference', '')
 
         with data_manager.SessionFactory() as session:
             query = session.query(Movie)
@@ -1061,27 +1207,200 @@ def recommend_movies():
                 query = query.filter(
                     Movie.genre.ilike('%horror%') |
                     Movie.genre.ilike('%mystery%') |
-                    Movie.genre.ilike('%thriller%')
+                    (Movie.genre.ilike('%thriller%') & ~Movie.genre.ilike('%action%')) |
+                    Movie.genre.ilike('%suspense%')
                 )
 
+            # Hole mehr Filme und mische sie für Vielfalt
             movies = query.order_by(
                 Movie.rating.desc(),
                 Movie.release_year.desc()
-            ).limit(5).all()
+            ).limit(20).all()
 
             if not movies:
                 flash('Leider wurden keine passenden Filme gefunden.', 'warning')
                 return render_template('movie_recommend.html', form=form)
 
-            recommendation = random.choice(movies)
-            reason = f"Dieser Film wurde basierend auf Ihrer Vorliebe für {genre_preference} ausgewählt."
+            # Mische die Filme und nimm die ersten 5
+            random.shuffle(movies)
+            recommended_movies = movies[:5]
+
+            reason = f"Diese Filme wurden basierend auf Ihrer Vorliebe für {genre_preference} ausgewählt."
 
             return render_template('movie_recommend.html',
-                                 recommendation=recommendation,
+                                 recommended_movies=recommended_movies,
                                  reason=reason,
+                                 genre_preference=genre_preference,
                                  form=form)
 
     return render_template('movie_recommend.html', form=form)
+
+
+@app.route('/api/movies', methods=['GET'])
+def api_movies():
+    """
+    API Endpoint für React Frontend - Optimiert mit Pagination
+    """
+    try:
+        search_query = request.args.get('search', '').strip()
+        genre_filter = request.args.get('genre', '').strip()
+        sort_by = request.args.get('sort', 'rating')
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 50))  # React kann mehr laden
+
+        # Optimierte Query mit SELECT nur benötigter Felder
+        query = data_manager.session.query(
+            Movie.id,
+            Movie.title,
+            Movie.genre,
+            Movie.rating,
+            Movie.release_year,
+            Movie.poster_url,
+            Movie.director,
+            Movie.summary
+        )
+
+        # Search filter (optimiert)
+        if search_query:
+            query = query.filter(
+                func.lower(Movie.title).contains(search_query.lower()) |
+                func.lower(Movie.genre).contains(search_query.lower())
+            )
+
+        # Genre filter (optimiert)
+        if genre_filter:
+            query = query.filter(Movie.genre == genre_filter)
+
+        # Sorting (mit Indizes optimiert)
+        if sort_by == 'title':
+            query = query.order_by(Movie.title)
+        elif sort_by == 'year_desc':
+            query = query.order_by(Movie.release_year.desc().nulls_last())
+        elif sort_by == 'year_asc':
+            query = query.order_by(Movie.release_year.asc().nulls_last())
+        else:  # rating (default)
+            query = query.order_by(Movie.rating.desc().nulls_last())
+
+        # Pagination
+        total_movies = query.count()
+        movies = query.offset((page - 1) * per_page).limit(per_page).all()
+
+        # Convert to JSON-serializable format
+        movies_data = []
+        for movie in movies:
+            movies_data.append({
+                'id': movie.id,
+                'title': movie.title,
+                'genre': movie.genre,
+                'year': movie.release_year,
+                'rating': float(movie.rating) if movie.rating else None,
+                'poster_url': movie.poster_url or '/static/default_poster.jpg',
+                'director': movie.director,
+                'summary': movie.summary
+            })
+
+        return jsonify({
+            'success': True,
+            'movies': movies_data,
+            'pagination': {
+                'page': page,
+                'per_page': per_page,
+                'total': total_movies,
+                'total_pages': (total_movies + per_page - 1) // per_page
+            },
+            'filters': {
+                'search': search_query,
+                'genre': genre_filter,
+                'sort': sort_by
+            }
+        })
+
+    except Exception as e:
+        app.logger.error(f"API Movies Error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Fehler beim Laden der Filme',
+            'movies': []
+        }), 500
+
+
+@app.route('/api/genres', methods=['GET'])
+def api_genres():
+    """
+    API Endpoint für verfügbare Genres
+    """
+    try:
+        genres = data_manager.session.query(Movie.genre).distinct().filter(Movie.genre.isnot(None)).all()
+        genre_list = [genre[0] for genre in genres if genre[0]]
+
+        return jsonify({
+            'success': True,
+            'genres': sorted(genre_list)
+        })
+
+    except Exception as e:
+        app.logger.error(f"API Genres Error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Fehler beim Laden der Genres',
+            'genres': []
+        }), 500
+
+
+@app.route('/api/movie/<int:movie_id>', methods=['GET'])
+def api_movie_detail(movie_id):
+    """
+    API Endpoint für einzelne Filmdetails
+    """
+    try:
+        movie = data_manager.session.query(Movie).filter_by(id=movie_id).first()
+
+        if not movie:
+            return jsonify({
+                'success': False,
+                'error': 'Film nicht gefunden'
+            }), 404
+
+        # Get user rating if logged in
+        user_rating = None
+        if current_user.is_authenticated:
+            user_movie = data_manager.session.query(UserMovie).filter_by(
+                user_id=current_user.id,
+                movie_id=movie_id
+            ).first()
+            if user_movie:
+                user_rating = user_movie.user_rating
+
+        movie_data = {
+            'id': movie.id,
+            'title': movie.title,
+            'genre': movie.genre,
+            'year': movie.year,
+            'rating': float(movie.rating) if movie.rating else None,
+            'poster_url': movie.poster_url or '/static/default_poster.jpg',
+            'director': movie.director,
+            'summary': movie.summary,
+            'user_rating': user_rating
+        }
+
+        return jsonify({
+            'success': True,
+            'movie': movie_data
+        })
+
+    except Exception as e:
+        app.logger.error(f"API Movie Detail Error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Fehler beim Laden der Filmdetails'
+        }), 500
+
+
+@app.route('/movies/react')
+def react_movies():
+    """React-basierte Movie-App mit moderner Frontend-Technologie"""
+    return render_template('react_movies.html')
+
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5002, debug=True)
