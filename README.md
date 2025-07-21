@@ -43,7 +43,7 @@ Ein modernes, vollständig ausgestattetes Web-Tool zum Verwalten, Bewerten und Q
 
 ### 1. Repository klonen
 ```bash
-git clone <dein-repo-url>
+git clone https://github.com/HEADES94/MovieProjektFinal
 cd MovieProjektFinal
 ```
 
