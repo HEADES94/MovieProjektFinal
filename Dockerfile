@@ -6,6 +6,7 @@ WORKDIR /app
 # System-Abhängigkeiten
 RUN apt-get update && apt-get install -y \
     gcc \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Python-Abhängigkeiten
@@ -25,7 +26,7 @@ ENV FLASK_ENV=production
 
 EXPOSE 5000
 
-# Health Check
+# Health Check mit curl (jetzt verfügbar)
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:5000/ || exit 1
 
